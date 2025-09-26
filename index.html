@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mars Web GIS (MVP)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    .panel { position: absolute; top: 8px; left: 8px; z-index: 1000; background: #fff; padding: 8px; border-radius: 6px; }
+    input[type="text"]{ width: 520px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <div><strong>Add COG/GeoTIFF by URL</strong></div>
+    <input id="url" type="text" placeholder="https://example.org/your.tif" />
+    <button id="add">Add layer</button>
+    <label style="margin-left:8px;">Opacity <input id="op" type="range" min="0" max="1" step="0.05" value="1"></label>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- GeoTIFF & GeoRaster (browser builds) -->
+  <script src="https://unpkg.com/geotiff/dist-browser/geotiff.min.js"></script>
+  <script src="https://unpkg.com/georaster/dist/georaster.browserify.min.js"></script>
+  <script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+
+  <script>
+    // Leaflet in geographic CRS (fits simple-cylindrical Mars tiles)
+    const map = L.map('map', { crs: L.CRS.EPSG4326 }).setView([0, 0], 2);
+
+    // OpenPlanetary Mars hillshade (TMS)
+    const marsHillshade = L.tileLayer(
+      "https://s3.us-east-1.wasabisys.com/planetarygis/tiles/mars/mola_hillshade/v2.0.0/xyz/{z}/{x}/{y}.webp",
+      { tms: true, attribution: '&copy; OpenPlanetary / MOLA Hillshade' }
+    ).addTo(map);
+
+    let currentLayer;
+
+    async function addGeoTIFF(url) {
+      try {
+        const response = await fetch(url, { mode: "cors" });
+        if (!response.ok) throw new Error("HTTP error " + response.status);
+        const arrayBuffer = await response.arrayBuffer();
+        const tiff = await geotiff.fromArrayBuffer(arrayBuffer);
+        const image = await tiff.getImage();
+        const geo = await parseGeoraster(arrayBuffer);
+
+        // Simple colouring: auto-stretch to 2-98% for single-band (e.g., DTM)
+        let options = {
+          georaster: geo,
+          resolution: 256,             // size of fetched blocks (balances speed/quality)
+          pixelValuesToColorFn: null,  // let the lib handle RGB; we set a fn only for single-band
+          opacity: parseFloat(document.getElementById('op').value),
+          pane: 'overlayPane'
+        };
+
+        if (geo.numberOfRasters === 1) {
+          // greyscale ramp
+          const stats = geo.statistics[0] || {};
+          const min = ('min' in stats) ? stats.min : image.getGDALMetadata().STATISTICS_MINIMUM || 0;
+          const max = ('max' in stats) ? stats.max : image.getGDALMetadata().STATISTICS_MAXIMUM || 1;
+          const lo = Number(min), hi = Number(max);
+          options.pixelValuesToColorFn = values => {
+            const v = values[0];
+            const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+            const g = Math.round(255 * t);
+            return `rgb(${g},${g},${g})`;
+          };
+        }
+
+        if (currentLayer) map.removeLayer(currentLayer);
+        currentLayer = new GeoRasterLayer(options).addTo(map);
+        // Fit to raster bounds
+        const b = image.getBoundingBox(); // [minX, minY, maxX, maxY]
+        map.fitBounds([[b[1], b[0]], [b[3], b[2]]]);
+
+      } catch (err) {
+        alert("Failed to load: " + err.message + "\n\nLikely causes: CORS missing or Range requests disabled on the host.");
+        console.error(err);
+      }
+    }
+
+    document.getElementById('add').onclick = () => {
+      const u = document.getElementById('url').value.trim();
+      if (u) addGeoTIFF(u);
+    };
+    document.getElementById('op').oninput = (e) => {
+      if (currentLayer) currentLayer.setOpacity(parseFloat(e.target.value));
+    };
+
+    // Quick buttons (your examples)
+    // Paste either URL below into the box to test:
+    // https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum-CaSSIS-SRR_MADNet_1.0/cassis_pan_srr_mosaic_hrsc_rgb_colour.tif
+    // https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum-CaSSIS-SRR_MADNet_1.0/CaSSIS-SRR-MADNet-DTM-mosaicv2.tif
+  </script>
+</body>
+</html>
