@@ -16,6 +16,7 @@
     html, body { height:100%; margin:0; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
     .app { display:grid; grid-template-columns: 340px 1fr; grid-template-rows: 100vh; }
+
     /* Sidebar */
     .sidebar { background:linear-gradient(180deg, var(--panel) 0%, var(--panel2) 100%); border-right:1px solid var(--border);
       padding:14px; box-sizing:border-box; overflow:auto; }
@@ -34,19 +35,23 @@
     .danger:hover { border-color:#b55; }
     .subgrid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
     .small { font-size:12px; color:var(--muted); }
+
     /* Map area */
     #map { position:relative; }
     .map { width:100%; height:100%; }
     .topbar { position:absolute; left:12px; top:12px; z-index:10; pointer-events:none; display:flex; gap:8px; flex-wrap:wrap; }
     .chip { pointer-events:auto; background:rgba(0,0,0,0.35); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:999px; font-size:12px; }
     .error { position:absolute; right:12px; top:12px; z-index:10; pointer-events:none; background:#2b1111; color:#ffd7d7; border:1px solid #723; padding:10px 12px; border-radius:10px; max-width:420px; display:none; }
+
     /* Bottom-right: scale + logo */
     .br { position:absolute; right:10px; bottom:10px; z-index:10; display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
     .ol-scale-line { position:static; background:rgba(20,20,28,0.9); color:#e6e6ea; border:1px solid var(--border); border-radius:8px; padding:2px 6px; }
     .logo { width:160px; height:auto; opacity:0.95; border-radius:10px; border:1px solid var(--border); background:#0f0f16; padding:6px; }
+
     /* Measure tooltip */
     .tooltip { position:absolute; background: rgba(20,20,28,0.9); color: #fff; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; pointer-events: none; transform: translate(-50%, -120%); font-size:12px; }
     .tooltip.hidden { display:none; }
+
     /* Mobile */
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -72,13 +77,13 @@
 
       <div class="section layers">
         <h3>Overlays (ESA GeoTIFF)</h3>
-        <label><input type="checkbox" id="chk-mola-tif"> <span>MOLA 463 m (GeoTIFF)</span></label>
-        <label><input type="checkbox" id="chk-hmc"> <span>HMC_11W24_ND5 (GeoTIFF)</span></label>
+        <label><input type="checkbox" id="chk-hrsc"> <span>HRSC mosaic (HMC_11W24_ND5_OXIA_CROP.tif)</span></label>
+        <label><input type="checkbox" id="chk-ctx"> <span>CTX ORI (F23_044811…_ORI.tif)</span></label>
         <div class="btn-row" style="margin-top:8px;">
-          <button id="btn-zoom-mola-tif">Zoom to MOLA GeoTIFF</button>
-          <button id="btn-zoom-hmc">Zoom to HMC GeoTIFF</button>
+          <button id="btn-zoom-hrsc">Zoom to HRSC</button>
+          <button id="btn-zoom-ctx">Zoom to CTX</button>
         </div>
-        <div class="help small">These load directly from ESA and may be blocked by CORS on your domain.</div>
+        <div class="help small">These load from ESA and may be blocked by CORS on your domain.</div>
       </div>
 
       <div class="section">
@@ -142,32 +147,33 @@
     ol.proj.addProjection(marsProj);
 
     // --- Basemaps (XYZ tiles, CORS-friendly)
-    const XYZ_MOLA_COLOR = "http://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_color-noshade_global/{z}/{x}/{y}.png"; // OpenPlanetary Colour MOLA
-    const XYZ_MOLA_HILL  = "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_hillshade/{z}/{x}/{y}.png";         // OpenPlanetary Hillshade (OPM)
-    const colorBase = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_COLOR, crossOrigin: '' }), visible: true });
-    const hillBase  = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_HILL,  crossOrigin: '' }), visible: false });
+    const XYZ_MOLA_COLOR = "http://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_color-noshade_global/{z}/{x}/{y}.png";
+    const XYZ_MOLA_HILL  = "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_hillshade/{z}/{x}/{y}.png";
+    const colorBase = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_COLOR, crossOrigin: '' }), visible: true, zIndex: 0 });
+    const hillBase  = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_HILL,  crossOrigin: '' }), visible: false, zIndex: 0 });
 
-    // --- ESA overlays (GeoTIFF). Keep them optional; require CORS to work when hosted remotely.
-    const URL_MOLA_TIF = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/MOLA_463m_OXIA_CROP_HRSC-Proj.tif";
-    const URL_HMC_TIF  = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif";
+    // --- ESA overlays (GeoTIFF). Require CORS on remote host to show/export.
+    const URL_HRSC = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif";
+    const URL_CTX  = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/CTX-ORIs/F23_044811_1985_XN_18N024W-F23_044956_1984_XN_18N024W-ORI.tif";
 
-    function makeGeoTiffLayer(url) {
+    function makeGeoTiffLayer(url, z) {
       const src = new GeoTIFF({
         sources: [{ url }],
-        // 32-bit float may be grayscale elevation; for display we convert to 8-bit RGB (stretch not applied)
-        convertToRGB: true,
+        convertToRGB: true,   // display-friendly
         normalize: false,
         interpolate: true
       });
-      return new ImageLayer({ source: src, visible: false });
+      const lyr = new ImageLayer({ source: src, visible: false, zIndex: z });
+      return lyr;
     }
-    const molaTif = makeGeoTiffLayer(URL_MOLA_TIF);
-    const hmcTif  = makeGeoTiffLayer(URL_HMC_TIF);
+    const hrscLayer = makeGeoTiffLayer(URL_HRSC, 10); // below CTX
+    const ctxLayer  = makeGeoTiffLayer(URL_CTX,  11); // above HRSC
 
     // --- Annotations
     const vectorSource = new VectorSource();
     const vectorLayer = new VectorLayer({
       source: vectorSource,
+      zIndex: 20,
       style: (feature) => {
         const geom = feature.getGeometry();
         const stroke = new Stroke({ color: '#9f9fff', width: 2 });
@@ -181,7 +187,7 @@
     // --- Map
     const map = new Map({
       target: 'mapCanvas',
-      layers: [colorBase, hillBase, molaTif, hmcTif, vectorLayer],
+      layers: [colorBase, hillBase, hrscLayer, ctxLayer, vectorLayer],
       view: new View({ projection: marsProj, center:[0,0], zoom:2, minZoom:1, maxZoom:22 }),
       controls: defaultControls({ zoom: true, attribution:false })
     });
@@ -203,23 +209,23 @@
       if (e.target.checked){ colorBase.setVisible(false); hillBase.setVisible(true); }
     });
 
-    // --- Overlays toggles
-    const chkMolaTif = document.getElementById('chk-mola-tif');
-    const chkHmc     = document.getElementById('chk-hmc');
-    chkMolaTif.addEventListener('change', ()=> molaTif.setVisible(chkMolaTif.checked));
-    chkHmc.addEventListener('change',     ()=> hmcTif.setVisible(chkHmc.checked));
+    // --- Overlay toggles
+    const chkHRSC = document.getElementById('chk-hrsc');
+    const chkCTX  = document.getElementById('chk-ctx');
+    chkHRSC.addEventListener('change', ()=> hrscLayer.setVisible(chkHRSC.checked));
+    chkCTX.addEventListener('change',  ()=> ctxLayer.setVisible(chkCTX.checked));
 
-    // --- Fit helpers
+    // --- Fit helpers (zoom to layer extent when available)
     function fitToLayer(layer){
       const src = layer.getSource();
       const extent = src.getImageExtent?.();
       if (extent) map.getView().fit(extent, { padding:[20,20,20,20], duration:600 });
     }
-    document.getElementById('btn-zoom-mola-tif').onclick = ()=> fitToLayer(molaTif);
-    document.getElementById('btn-zoom-hmc').onclick      = ()=> fitToLayer(hmcTif);
+    document.getElementById('btn-zoom-hrsc').onclick = ()=> fitToLayer(hrscLayer);
+    document.getElementById('btn-zoom-ctx').onclick  = ()=> fitToLayer(ctxLayer);
 
-    // Preflight: warn early if ESA blocks CORS
-    [ [molaTif,'MOLA GeoTIFF'], [hmcTif,'HMC GeoTIFF'] ].forEach(([layer,name])=>{
+    // Warn early if CORS blocks overlays
+    [ [hrscLayer,'HRSC GeoTIFF'], [ctxLayer,'CTX GeoTIFF'] ].forEach(([layer,name])=>{
       layer.getSource().on('change', ()=> {
         const st = layer.getSource().getState?.();
         if (st === 'error') showError(`${name} failed to load (likely CORS). Mirror on your domain with CORS enabled.`);
@@ -241,7 +247,7 @@
       }
       select.setActive(false); modify.setActive(false);
       const type = mode==='line' ? 'LineString' : mode==='poly' ? 'Polygon' : 'Point';
-      draw = new ol.interaction.Draw({ source: vectorSource, type });
+      draw = new Draw({ source: vectorSource, type });
       map.addInteraction(draw);
       document.getElementById('btn-' + (mode==='poly'?'poly':mode==='line'?'line':'point')).classList.add('active');
       draw.on('drawstart', (evt)=>{ tooltip.classList.remove('hidden'); updateTooltip(evt.feature); evt.feature.on('change', ()=> updateTooltip(evt.feature)); });
@@ -252,7 +258,7 @@
     document.getElementById('btn-line').onclick   = ()=> setMode('line');
     document.getElementById('btn-poly').onclick   = ()=> setMode('poly');
     document.getElementById('btn-clear').onclick  = ()=> vectorSource.clear();
-    document.getElementById('btn-reset').onclick  = ()=> map.getView().setCenter([0,0]) || map.getView().setZoom(2);
+    document.getElementById('btn-reset').onclick  = ()=> { map.getView().setCenter([0,0]); map.getView().setZoom(2); };
     setMode('select');
 
     // --- Measurement tooltip
@@ -312,14 +318,16 @@
         const url = out.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = 'saiil-mars-map.png'; a.click();
       } catch (e) {
         console.error(e);
-        showError('Export blocked by browser due to cross-origin canvas. Ensure any remote layers are CORS-enabled.');
+        showError('Export blocked by browser due to cross-origin canvas. Ensure remote layers are CORS-enabled.');
       }
     };
 
     // --- Export helpers
     function metersPerPixel() {
-      const res = map.getView().getResolution(); if (!res) return 0; const c = map.getView().getCenter(); if (!c) return 0;
-      const c1 = [c[0], c[1]], c2 = [c[0] + res, c[1]]; return getLength(new LineString([c1,c2],'XY'), {radius:MARS_RADIUS});
+      const res = map.getView().getResolution(); if (!res) return 0;
+      const c = map.getView().getCenter(); if (!c) return 0;
+      const c1 = [c[0], c[1]], c2 = [c[0] + res, c[1]];
+      return getLength(new LineString([c1,c2],'XY'), {radius:MARS_RADIUS});
     }
     function niceScale(max){ const p = Math.pow(10, Math.floor(Math.log10(max))); const d = max / p; if (d >= 5) return 5*p; if (d >= 2) return 2*p; return 1*p; }
     function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
