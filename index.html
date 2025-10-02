@@ -2,131 +2,173 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>SAIIL Mars Web GIS Prototype</title>
+  <title>SAIIL — Mars Web GIS Prototype (OpenLayers)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="favicon.ico" />
-  <!-- OpenLayers (no SRI to avoid integrity/CORS pitfalls) -->
+  <!-- OpenLayers -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
   <style>
-    html, body { margin:0; height:100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
-    #map { width:100%; height:100%; position:relative; background:#0a0a14; } /* deep space vibe */
-    /* Controls panel */
-    .panel {
-      position:absolute; top:10px; left:10px; z-index:1000;
-      background:rgba(20,20,28,0.9); color:#e6e6ea; border:1px solid #2a2a3a;
-      border-radius:12px; padding:10px 12px; backdrop-filter: blur(4px); min-width: 260px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    :root{
+      --bg:#0b0d12; --panel:#141824; --panel2:#10131b; --border:#2a2f3d;
+      --text:#e7e9ee; --muted:#b9bfcd; --accent:#8ea8ff; --accent-2:#5e86ff;
     }
-    .panel h3 { margin:6px 0 8px; font-size:14px; font-weight:600; letter-spacing:0.2px; }
-    .group { margin-bottom:10px; }
-    .group label { display:block; margin:6px 0; cursor:pointer; }
-    .row { display:flex; gap:6px; flex-wrap:wrap; }
-    .row button, .row select {
-      appearance:none; border:1px solid #3a3a4a; background:#171722; color:#e6e6ea; border-radius:10px;
-      padding:7px 10px; cursor:pointer; font-size:13px;
+    html, body { height:100%; margin:0; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:var(--text); background:var(--bg); }
+    .app {
+      display:grid; grid-template-columns: 320px 1fr; grid-template-rows: 100vh;
     }
-    .row button:hover { border-color:#6b6bff; }
-    .row button.active { border-color:#9f9fff; box-shadow: 0 0 0 2px rgba(120,120,255,0.25) inset; }
-    .small { font-size:12px; opacity:0.9; }
+    /* Sidebar */
+    .sidebar {
+      background:linear-gradient(180deg, var(--panel) 0%, var(--panel2) 100%);
+      border-right:1px solid var(--border);
+      padding:14px 14px 12px;
+      box-sizing:border-box;
+      overflow:auto;
+    }
+    .brand {
+      display:flex; align-items:center; gap:10px; margin-bottom:10px;
+    }
+    .brand .dot { width:10px; height:10px; background:var(--accent); border-radius:50%; box-shadow: 0 0 10px var(--accent-2); }
+    .brand h1 { font-size:15px; margin:0; font-weight:600; letter-spacing:0.2px; }
+    .section {
+      border:1px solid var(--border);
+      border-radius:12px; padding:10px; margin-top:10px; background:rgba(255,255,255,0.02);
+    }
+    .section h3 { margin:0 0 8px 0; font-size:13px; font-weight:700; color:var(--text); }
+    .help { font-size:12px; color:var(--muted); margin-top:6px; }
+    .layers label { display:flex; align-items:center; gap:8px; margin:8px 0; cursor:pointer; }
+    .btn-row { display:flex; flex-wrap:wrap; gap:8px; }
+    button, .btn {
+      appearance:none; border:1px solid var(--border); color:var(--text); background:#0f1320;
+      padding:8px 10px; border-radius:10px; font-size:13px; cursor:pointer;
+    }
+    button:hover { border-color:var(--accent); }
+    button.active { border-color:var(--accent); box-shadow: 0 0 0 2px rgba(142,168,255,0.18) inset; }
+    .danger { border-color:#5a2a2a; background:#1a1010; }
+    .danger:hover { border-color:#b55; }
+    .subgrid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .small { font-size:12px; color:var(--muted); }
+
+    /* Map area */
+    #map { position:relative; }
+    .map { width:100%; height:100%; }
+    .topbar {
+      position:absolute; left:12px; top:12px; z-index:10; pointer-events:none;
+      display:flex; gap:8px; flex-wrap:wrap;
+    }
+    .chip {
+      pointer-events:auto;
+      background:rgba(0,0,0,0.35); border:1px solid var(--border); color:var(--text);
+      padding:6px 10px; border-radius:999px; font-size:12px;
+    }
     .error {
-      position:absolute; top:10px; right:10px; z-index:1000;
+      position:absolute; right:12px; top:12px; z-index:10; pointer-events:none;
       background:#2b1111; color:#ffd7d7; border:1px solid #723; padding:10px 12px; border-radius:10px;
       max-width:420px; display:none;
     }
-    /* Bottom-right overlay: scalebar + logo */
-    .br-wrap {
-      position:absolute; right:10px; bottom:10px; z-index:1000; display:flex; flex-direction:column; align-items:flex-end; gap:8px;
+    /* Bottom-right: scale + logo */
+    .br {
+      position:absolute; right:10px; bottom:10px; z-index:10; display:flex; flex-direction:column; align-items:flex-end; gap:8px;
     }
-    /* We'll draw our OWN scale bar on export, but on-map we use OL's ScaleLine styled to sit bottom-right */
     .ol-scale-line {
-      position:static; /* keep inside .br-wrap stack */
-      background:rgba(20,20,28,0.9); color:#e6e6ea; border:1px solid #2a2a3a; border-radius:8px; padding:2px 6px;
+      position:static;
+      background:rgba(20,20,28,0.9); color:#e6e6ea; border:1px solid var(--border); border-radius:8px; padding:2px 6px;
     }
     .logo {
-      width:160px; height:auto; opacity:0.95; border-radius:10px; border:1px solid #2a2a3a; background:#0f0f16;
-      padding:6px;
+      width:160px; height:auto; opacity:0.95; border-radius:10px; border:1px solid var(--border); background:#0f0f16; padding:6px;
     }
-    /* Measure tooltip */
+    /* Tooltip for measurement */
     .tooltip {
-      position: absolute; background: rgba(20,20,28,0.9); color: #fff; padding: 4px 8px;
-      border: 1px solid #2a2a3a; border-radius: 6px; white-space: nowrap; pointer-events: none;
+      position:absolute; background: rgba(20,20,28,0.9); color: #fff; padding: 4px 8px;
+      border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; pointer-events: none;
       transform: translate(-50%, -120%);
       font-size:12px;
     }
     .tooltip.hidden { display:none; }
 
-    /* Simple credits */
-    .credits {
-      position:absolute; right:10px; top:10px; z-index:1000; font-size:11px; color:#bbb;
-      background:rgba(0,0,0,0.35); padding:4px 6px; border-radius:8px;
+    /* Mobile: collapse sidebar into top row */
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      .sidebar { height:auto; max-height:48vh; }
+      #map { height: calc(100vh - 48vh); }
     }
   </style>
 </head>
 <body>
-  <div id="map"></div>
-
-  <div class="panel" id="ui">
-    <div class="group">
-      <h3>Layers</h3>
-      <label><input type="checkbox" id="chk-mola" checked> MOLA 463 m (default)</label>
-      <label><input type="checkbox" id="chk-hmc"> HMC_11W24_ND5 (CTX/HiRISE composite)</label>
-      <div class="small">The map auto-zooms to MOLA on load.</div>
-    </div>
-
-    <div class="group">
-      <h3>Annotations & Measure</h3>
-      <div class="row">
-        <button id="btn-select" title="Select/Move features">Select</button>
-        <button id="btn-point" title="Add points">Point</button>
-        <button id="btn-line" title="Add line (measure length)">Line</button>
-        <button id="btn-poly" title="Add polygon (measure area)">Polygon</button>
-        <button id="btn-clear" title="Clear all annotations">Clear</button>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <h1>SAIIL — Mars Web GIS</h1>
       </div>
-      <div class="small">Distances/areas computed on a Mars sphere (R≈3,396,190 m).</div>
-    </div>
 
-    <div class="group">
-      <h3>Print</h3>
-      <div class="row">
-        <button id="btn-export">Export PNG</button>
+      <div class="section layers">
+        <h3>Layers</h3>
+        <label><input type="checkbox" id="chk-mola" checked> <span>MOLA 463 m (default)</span></label>
+        <label><input type="checkbox" id="chk-hmc"> <span>HMC_11W24_ND5 (CTX/HiRISE)</span></label>
+        <div class="btn-row" style="margin-top:8px;">
+          <button id="btn-zoom-mola">Zoom to MOLA</button>
+          <button id="btn-zoom-hmc">Zoom to HMC</button>
+        </div>
+        <div class="help">If a layer doesn’t appear, it’s likely blocked by CORS on the ESA server. Mirror the TIFFs on a CORS-enabled host for production.</div>
       </div>
-      <div class="small">Exports layers, annotations, and a drawn scale bar.</div>
-    </div>
-  </div>
 
-  <div class="credits">© SAIIL – Mars Web GIS Prototype</div>
+      <div class="section">
+        <h3>Annotations & Measure</h3>
+        <div class="btn-row" style="margin-bottom:8px;">
+          <button id="btn-select" title="Select/modify features">Select</button>
+          <button id="btn-point"  title="Add points">Point</button>
+          <button id="btn-line"   title="Add line (measure length)">Line</button>
+          <button id="btn-poly"   title="Add polygon (measure area)">Polygon</button>
+        </div>
+        <div class="btn-row">
+          <button id="btn-clear" class="danger">Clear annotations</button>
+        </div>
+        <div class="help">Measurements use a Mars sphere (R ≈ 3,396,190 m). Drag vertices to refine.</div>
+      </div>
 
-  <div class="error" id="err"></div>
+      <div class="section">
+        <h3>Print / Export</h3>
+        <div class="subgrid">
+          <button id="btn-export">Export PNG</button>
+          <button id="btn-reset">Reset view</button>
+        </div>
+        <div class="help">Exports map, annotations, scale bar, and logo.</div>
+      </div>
+    </aside>
 
-  <!-- Bottom-right stack: ScaleLine + Logo -->
-  <div class="br-wrap">
-    <div id="scaleSlot"></div>
-    <img class="logo" src="SAIIL-logo-medium-size.png" alt="SAIIL logo" onerror="this.style.display='none'">
+    <main id="map">
+      <div id="mapCanvas" class="map"></div>
+      <div class="topbar">
+        <div class="chip">Pan: drag • Zoom: wheel / pinch • Reset: button</div>
+      </div>
+      <div id="err" class="error"></div>
+      <div class="br">
+        <div id="scaleSlot"></div>
+        <img class="logo" src="SAIIL-logo-medium-size.png" alt="SAIIL logo" onerror="this.style.display='none'">
+      </div>
+    </main>
   </div>
 
   <script>
-    // Aliases (OpenLayers UMD bundle)
+    // --- OpenLayers aliases
     const Map = ol.Map;
     const View = ol.View;
-    const TileLayer = ol.layer.Tile;
     const ImageLayer = ol.layer.Image;
     const VectorLayer = ol.layer.Vector;
     const GeoTIFF = ol.source.GeoTIFF;
     const VectorSource = ol.source.Vector;
-    const ImageStatic = ol.source.ImageStatic;
-    const OSM = ol.source.OSM;
-    const {fromLonLat, addProjection, addCoordinateTransforms, Projection} = ol.proj;
+    const {Projection} = ol.proj;
     const {ScaleLine, defaults: defaultControls} = ol.control;
-    const {Draw, Modify, Select, defaults: defaultInteractions} = ol.interaction;
+    const {Draw, Modify, Select} = ol.interaction;
     const {Style, Stroke, Fill, Circle: CircleStyle} = ol.style;
     const {LineString, Polygon} = ol.geom;
     const Overlay = ol.Overlay;
     const {getArea, getLength} = ol.sphere;
 
-    // === Mars spherical model ===
-    // Mars_GCS_2000 is geographic lon/lat on a Mars sphere (no EPSG). We'll define a custom 'MARS:4326'.
-    const MARS_RADIUS = 3396190; // meters (mean radius)
+    // --- Projection: Mars_GCS_2000 approximated as spherical lon/lat
+    const MARS_RADIUS = 3396190; // meters
     const marsProj = new Projection({
       code: 'MARS:4326',
       units: 'degrees',
@@ -136,356 +178,263 @@
     });
     ol.proj.addProjection(marsProj);
 
-    // Utility: meters per pixel at current view center (horizontally), for Mars sphere in degrees
-    function metersPerPixel(map) {
-      const size = map.getSize();
-      if (!size) return 0;
-      const px = 1;
-      const center = map.getView().getCenter();
-      if (!center) return 0;
-      const res = map.getView().getResolution(); // degrees per pixel
-      if (!res) return 0;
-
-      const lon = center[0], lat = center[1];
-      const lon2 = lon + res * px;
-      const c1 = [lon, lat];
-      const c2 = [lon2, lat];
-      return getLength(new LineString([c1, c2], 'XY'), {radius: MARS_RADIUS}) / px;
-    }
-
-    // === Annotation layer & styles ===
-    const vectorSource = new VectorSource();
-    const vectorLayer = new VectorLayer({
-      source: vectorSource,
-      style: feature => {
-        const geom = feature.getGeometry();
-        const baseStroke = new Stroke({ color: '#9f9fff', width: 2 });
-        const fill = new Fill({ color: 'rgba(159,159,255,0.15)' });
-        if (geom instanceof LineString) {
-          return new Style({ stroke: baseStroke });
-        } else if (geom instanceof Polygon) {
-          return new Style({ stroke: baseStroke, fill });
-        } else {
-          return new Style({ image: new CircleStyle({ radius:5, fill: new Fill({color:'#9f9fff'}), stroke: new Stroke({color:'#333', width:1}) }) });
-        }
-      }
-    });
-
-    // === Basemap GeoTIFF layers ===
+    // --- Sources (ESA URLs)
     const URL_MOLA = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/MOLA_463m_OXIA_CROP_HRSC-Proj.tif";
     const URL_HMC  = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif";
 
-    // Each as an Image layer backed by GeoTIFF source (geotiff.js inside OL). If CORS blocks, we catch and notify.
-    function makeGeoTiffLayer(url, title) {
+    function makeGeoTiffLayer(url, visibleByDefault) {
       const src = new GeoTIFF({
         sources: [{ url }],
-        convertToRGB: true, // for 8-bit single-band, display as grayscale
-        interpolate: true,
-        // normalize false keeps original 8-bit range; let OL stretch; if needed set false:
-        normalize: false
+        convertToRGB: true,
+        normalize: false,
+        interpolate: true
       });
-      const layer = new ImageLayer({ source: src, visible: title.includes('MOLA') }); // MOLA on by default
-      layer.set('title', title);
+      const layer = new ImageLayer({ source: src, visible: visibleByDefault });
       return layer;
     }
+    const molaLayer = makeGeoTiffLayer(URL_MOLA, true);
+    const hmcLayer  = makeGeoTiffLayer(URL_HMC,  false);
 
-    const molaLayer = makeGeoTiffLayer(URL_MOLA, 'MOLA 463m');
-    const hmcLayer  = makeGeoTiffLayer(URL_HMC,  'HMC 11W24 ND5');
+    // --- Annotations
+    const vectorSource = new VectorSource();
+    const vectorLayer = new VectorLayer({
+      source: vectorSource,
+      style: (feature) => {
+        const geom = feature.getGeometry();
+        const stroke = new Stroke({ color: '#9f9fff', width: 2 });
+        const fill = new Fill({ color: 'rgba(159,159,255,0.15)' });
+        if (geom instanceof LineString) return new Style({ stroke });
+        if (geom instanceof Polygon)   return new Style({ stroke, fill });
+        return new Style({ image: new CircleStyle({ radius:5, fill: new Fill({color:'#9f9fff'}), stroke: new Stroke({color:'#333', width:1}) }) });
+      }
+    });
 
-    // === Map & view ===
+    // --- Map & view
     const map = new Map({
-      target: 'map',
-      layers: [
-        // Optional tiny dark base in case GeoTIFFs fail (commented; OL Image layers will render directly)
-        // new TileLayer({ source: new OSM(), visible:false }),
-        molaLayer,
-        hmcLayer,
-        vectorLayer
-      ],
-      view: new View({
-        projection: marsProj,
-        center: [0, 0], // degrees
-        zoom: 2,        // temporary; we will fit to MOLA extent on load
-        minZoom: 1,
-        maxZoom: 22
-      }),
-      controls: defaultControls({ zoom: true, attribution: false })
+      target: 'mapCanvas',
+      layers: [molaLayer, hmcLayer, vectorLayer],
+      view: new View({ projection: marsProj, center:[0,0], zoom:2, minZoom:1, maxZoom:22 }),
+      controls: defaultControls({ zoom: true, attribution:false })
     });
 
-    // === Scale bar (on-map display) ===
-    const scale = new ScaleLine({
-      units: 'metric',
-      minWidth: 140,
-      bar: false,
-      steps: 4
-    });
-    // Attach the ScaleLine DOM into our bottom-right stack (.br-wrap)
+    // --- Scale bar in bottom-right
+    const scale = new ScaleLine({ units:'metric', minWidth:140, bar:false, steps:4 });
     scale.setTarget(document.getElementById('scaleSlot'));
     map.addControl(scale);
 
-    // === Error surface ===
+    // --- Error box
     const errBox = document.getElementById('err');
     function showError(msg) {
       errBox.textContent = msg;
       errBox.style.display = 'block';
-      setTimeout(()=>{ errBox.style.display='none'; }, 9000);
+      clearTimeout(showError._t);
+      showError._t = setTimeout(()=> errBox.style.display='none', 9000);
     }
 
-    // === Fit to MOLA when ready ===
+    // --- Fit to MOLA when ready
+    function fitToLayer(layer) {
+      const src = layer.getSource();
+      const extent = src.getImageExtent?.();
+      if (extent) map.getView().fit(extent, { padding:[20,20,20,20], duration:600 });
+    }
     molaLayer.getSource().on('change', () => {
-      const state = molaLayer.getSource().getState?.();
-      if (state === 'ready' || state === 'loaded') {
-        const extent = molaLayer.getSource().getImageExtent?.();
-        if (extent) {
-          map.getView().fit(extent, { padding:[20,20,20,20], duration: 600 });
-        }
-      } else if (state === 'error') {
-        showError('Failed to load MOLA GeoTIFF (CORS or network). If this persists, host a CORS-enabled copy.');
-      }
+      const st = molaLayer.getSource().getState?.();
+      if (st === 'ready' || st === 'loaded') fitToLayer(molaLayer);
+      if (st === 'error') showError('Failed to load MOLA GeoTIFF (CORS or network).');
     });
     hmcLayer.getSource().on('change', () => {
-      const state = hmcLayer.getSource().getState?.();
-      if (state === 'error') {
-        showError('Failed to load HMC GeoTIFF (CORS or network).');
-      }
+      const st = hmcLayer.getSource().getState?.();
+      if (st === 'error') showError('Failed to load HMC GeoTIFF (CORS or network).');
     });
 
-    // === Layer toggles ===
-    const chkMola = document.getElementById('chk-mola');
-    const chkHmc  = document.getElementById('chk-hmc');
-    chkMola.addEventListener('change', ()=> molaLayer.setVisible(chkMola.checked));
-    chkHmc.addEventListener('change',  ()=> hmcLayer.setVisible(chkHmc.checked));
+    // --- Layer toggles & zoom to extent
+    const chkM = document.getElementById('chk-mola');
+    const chkH = document.getElementById('chk-hmc');
+    chkM.addEventListener('change', ()=> molaLayer.setVisible(chkM.checked));
+    chkH.addEventListener('change', ()=> hmcLayer.setVisible(chkH.checked));
+    document.getElementById('btn-zoom-mola').onclick = ()=> fitToLayer(molaLayer);
+    document.getElementById('btn-zoom-hmc').onclick  = ()=> fitToLayer(hmcLayer);
 
-    // === Interactions: select / draw / modify ===
+    // --- Interactions: select/modify + draw
     const select = new Select();
     const modify = new Modify({ source: vectorSource });
     map.addInteraction(select);
     map.addInteraction(modify);
-
     let draw = null;
+
     function setMode(mode) {
-      // remove existing draw
       if (draw) { map.removeInteraction(draw); draw = null; }
-      // deactivate select while drawing, then re-enable
+      const buttons = ['btn-select','btn-point','btn-line','btn-poly'];
+      buttons.forEach(id => document.getElementById(id).classList.remove('active'));
+
       if (mode === 'select') {
-        select.setActive(true);
-        modify.setActive(true);
-        setActiveButton('btn-select');
+        select.setActive(true); modify.setActive(true);
+        document.getElementById('btn-select').classList.add('active');
         tooltip.classList.add('hidden');
         return;
       }
-      select.setActive(false);
-      modify.setActive(false);
+      select.setActive(false); modify.setActive(false);
 
-      if (mode === 'point' || mode === 'line' || mode === 'poly') {
-        const type = mode === 'point' ? 'Point' : (mode === 'line' ? 'LineString' : 'Polygon');
-        draw = new Draw({ source: vectorSource, type });
-        map.addInteraction(draw);
-        setActiveButton(mode === 'point' ? 'btn-point' : mode === 'line' ? 'btn-line' : 'btn-poly');
+      let type = 'Point';
+      if (mode === 'line') type = 'LineString';
+      if (mode === 'poly') type = 'Polygon';
+      draw = new Draw({ source: vectorSource, type });
+      map.addInteraction(draw);
+      document.getElementById('btn-' + (mode === 'poly' ? 'poly' : mode === 'line' ? 'line' : 'point')).classList.add('active');
 
-        // Measurement feedback
-        draw.on('drawstart', evt => {
-          tooltip.classList.remove('hidden');
-          updateTooltip(evt.feature);
-          evt.feature.on('change', () => updateTooltip(evt.feature));
-        });
-        draw.on('drawend', () => {
-          setTimeout(()=>tooltip.classList.add('hidden'), 200);
-        });
-      }
-    }
-
-    function setActiveButton(id) {
-      ['btn-select','btn-point','btn-line','btn-poly'].forEach(b=>{
-        const el = document.getElementById(b);
-        if (!el) return;
-        if (b === id) el.classList.add('active'); else el.classList.remove('active');
+      draw.on('drawstart', (evt) => {
+        tooltip.classList.remove('hidden');
+        updateTooltip(evt.feature);
+        evt.feature.on('change', () => updateTooltip(evt.feature));
+      });
+      draw.on('drawend', () => {
+        setTimeout(()=> tooltip.classList.add('hidden'), 200);
       });
     }
-
     document.getElementById('btn-select').onclick = ()=> setMode('select');
     document.getElementById('btn-point').onclick  = ()=> setMode('point');
     document.getElementById('btn-line').onclick   = ()=> setMode('line');
     document.getElementById('btn-poly').onclick   = ()=> setMode('poly');
     document.getElementById('btn-clear').onclick  = ()=> vectorSource.clear();
-
-    // Start in Select mode
+    document.getElementById('btn-reset').onclick  = ()=> fitToLayer(molaLayer);
     setMode('select');
 
-    // === Measure tooltip overlay ===
+    // --- Measurement tooltip overlay
     const tooltip = document.createElement('div');
     tooltip.className = 'tooltip hidden';
     const tooltipOverlay = new Overlay({ element: tooltip, offset:[0, -12], positioning:'bottom-center' });
     map.addOverlay(tooltipOverlay);
 
-    function formatLength(m) {
-      if (m > 1000) return (m/1000).toFixed(2) + ' km';
-      return m.toFixed(1) + ' m';
-    }
-    function formatArea(a) {
-      if (a > 1e6) return (a/1e6).toFixed(2) + ' km²';
-      return a.toFixed(1) + ' m²';
-    }
-    function updateTooltip(feature) {
-      const geom = feature.getGeometry();
-      let txt = '';
-      if (geom instanceof LineString) {
-        const coords = geom.getCoordinates();
-        const len = getLength(new LineString(coords, 'XY'), {radius: MARS_RADIUS});
-        txt = 'Length: ' + formatLength(len);
+    function formatLen(m){ return m>1000 ? (m/1000).toFixed(2)+' km' : m.toFixed(1)+' m'; }
+    function formatArea(a){ return a>1e6 ? (a/1e6).toFixed(2)+' km²' : a.toFixed(1)+' m²'; }
+    function updateTooltip(feature){
+      const g = feature.getGeometry();
+      if (g instanceof LineString) {
+        const coords = g.getCoordinates();
+        const len = getLength(new LineString(coords,'XY'), {radius:MARS_RADIUS});
+        tooltip.textContent = 'Length: ' + formatLen(len);
         tooltipOverlay.setPosition(coords[coords.length-1]);
-      } else if (geom instanceof Polygon) {
-        const coords = geom.getCoordinates()[0];
-        const area = getArea(new Polygon([coords], 'XY'), {radius: MARS_RADIUS});
-        txt = 'Area: ' + formatArea(area);
-        // place near last vertex
-        tooltipOverlay.setPosition(coords[coords.length-2] || coords[0]);
+      } else if (g instanceof Polygon) {
+        const ring = g.getCoordinates()[0];
+        const area = getArea(new Polygon([ring],'XY'), {radius:MARS_RADIUS});
+        tooltip.textContent = 'Area: ' + formatArea(area);
+        tooltipOverlay.setPosition(ring[ring.length-2] || ring[0]);
       } else {
-        const c = geom.getCoordinates();
+        const c = g.getCoordinates();
+        tooltip.textContent = `Point: ${c.map(v=>v.toFixed(4)).join(', ')}`;
         tooltipOverlay.setPosition(c);
-        txt = `Point: ${c.map(v=>v.toFixed(4)).join(', ')}`;
       }
-      tooltip.textContent = txt;
     }
 
-    // === Export PNG (layers + annotations + custom scale bar + logo) ===
-    document.getElementById('btn-export').onclick = async () => {
+    // --- Export PNG (layers + annotations + custom scale + logo)
+    document.getElementById('btn-export').onclick = () => {
       try {
-        const size = map.getSize();
-        if (!size) return;
-        // Force a synchronous render
+        const size = map.getSize(); if (!size) return;
         map.renderSync();
-        // Composite all layer canvases
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = size[0];
-        exportCanvas.height = size[1];
-        const ctx = exportCanvas.getContext('2d');
 
-        // Draw each OL layer canvas in order
-        document.querySelectorAll('.ol-layer canvas').forEach(layerCanvas => {
-          if (layerCanvas.width > 0) {
-            ctx.globalAlpha = layerCanvas.parentNode.style.opacity ? Number(layerCanvas.parentNode.style.opacity) : 1;
-            const transform = layerCanvas.style.transform;
-            // Parse matrix(a, b, c, d, e, f)
-            const matrix = transform.match(/^matrix\(([^\(]+)\)$/);
-            if (matrix) {
-              const vals = matrix[1].split(',').map(Number);
-              ctx.setTransform(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5]);
-            } else {
-              ctx.setTransform(1, 0, 0, 1, 0, 0);
-            }
-            ctx.drawImage(layerCanvas, 0, 0);
+        const out = document.createElement('canvas');
+        out.width = size[0]; out.height = size[1];
+        const ctx = out.getContext('2d');
+
+        document.querySelectorAll('.ol-layer canvas').forEach(cv => {
+          if (cv.width === 0 || cv.height === 0) return;
+          const tr = cv.style.transform;
+          const m = tr.match(/^matrix\(([^\(]+)\)$/);
+          if (m) {
+            const v = m[1].split(',').map(Number);
+            ctx.setTransform(v[0],v[1],v[2],v[3],v[4],v[5]);
+          } else {
+            ctx.setTransform(1,0,0,1,0,0);
           }
+          ctx.globalAlpha = cv.parentNode.style.opacity ? Number(cv.parentNode.style.opacity) : 1;
+          ctx.drawImage(cv, 0, 0);
         });
-
-        // Reset transform
         ctx.setTransform(1,0,0,1,0,0);
 
-        // Draw a custom scale bar (bottom-right above the logo)
+        // Draw a scale bar
         drawExportScaleBar(ctx);
 
-        // Draw logo if present in DOM
-        const logoImg = document.querySelector('.logo');
-        if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+        // Draw logo (if loaded)
+        const logo = document.querySelector('.logo');
+        if (logo && logo.complete && logo.naturalWidth > 0) {
           const margin = 10;
-          const w = Math.min(160, exportCanvas.width * 0.2);
-          const aspect = logoImg.naturalHeight / logoImg.naturalWidth;
-          const h = w * aspect;
+          const w = Math.min(160, out.width*0.2);
+          const h = w * (logo.naturalHeight / logo.naturalWidth);
           ctx.save();
           ctx.globalAlpha = 0.95;
-          roundRect(ctx, exportCanvas.width - w - margin, exportCanvas.height - h - margin, w, h, 10);
+          roundRect(ctx, out.width - w - margin, out.height - h - margin, w, h, 10);
           ctx.clip();
-          ctx.drawImage(logoImg, exportCanvas.width - w - margin, exportCanvas.height - h - margin, w, h);
+          ctx.drawImage(logo, out.width - w - margin, out.height - h - margin, w, h);
           ctx.restore();
-          // thin border
           ctx.strokeStyle = 'rgba(255,255,255,0.25)';
           ctx.lineWidth = 1;
-          roundRect(ctx, exportCanvas.width - w - margin, exportCanvas.height - h - margin, w, h, 10);
+          roundRect(ctx, out.width - w - margin, out.height - h - margin, w, h, 10);
           ctx.stroke();
         }
 
-        const dataURL = exportCanvas.toDataURL('image/png');
-        // trigger download
-        const a = document.createElement('a');
-        a.href = dataURL;
-        a.download = 'saiil-mars-map.png';
-        a.click();
+        const url = out.toDataURL('image/png');
+        const a = document.createElement('a'); a.href = url; a.download = 'saiil-mars-map.png'; a.click();
       } catch (e) {
         console.error(e);
-        showError('Export failed (see console). Some browsers block cross-origin canvases.');
+        showError('Export blocked by browser due to cross-origin canvas. Mirror TIFFs with CORS enabled to allow export.');
       }
     };
 
-    function roundRect(ctx, x, y, w, h, r) {
+    // --- Helpers for export scale bar
+    function metersPerPixel() {
+      const size = map.getSize(); if (!size) return 0;
+      const res = map.getView().getResolution(); if (!res) return 0; // degrees/pixel
+      const c = map.getView().getCenter(); if (!c) return 0;
+      const c1 = [c[0], c[1]], c2 = [c[0] + res, c[1]];
+      return getLength(new LineString([c1,c2],'XY'), {radius:MARS_RADIUS});
+    }
+    function niceScale(max) {
+      const p = Math.pow(10, Math.floor(Math.log10(max)));
+      const d = max / p;
+      if (d >= 5) return 5*p;
+      if (d >= 2) return 2*p;
+      return 1*p;
+    }
+    function roundRect(ctx, x,y,w,h,r){
       ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
       ctx.closePath();
     }
-
-    function niceScale(max) {
-      // nice round numbers: 1, 2, 5 × 10^n
-      const pow = Math.pow(10, Math.floor(Math.log10(max)));
-      const d = max / pow;
-      if (d >= 5) return 5 * pow;
-      if (d >= 2) return 2 * pow;
-      return 1 * pow;
-    }
-
-    function drawExportScaleBar(ctx) {
-      const pxPerM = 1 / Math.max(1e-9, metersPerPixel(map)); // pixels per meter
-      // target a bar ~ 180px
+    function drawExportScaleBar(ctx){
+      const mpp = metersPerPixel(); if (!mpp) return;
       const targetPx = 180;
-      const targetMeters = targetPx / Math.max(1e-9, pxPerM);
+      const targetMeters = targetPx * mpp;
       const barMeters = niceScale(targetMeters);
-      const barPx = barMeters * pxPerM;
+      const barPx = barMeters / mpp;
 
-      const margin = 14;
-      const barH = 10;
+      const margin = 14, barH = 10;
       const x = ctx.canvas.width - barPx - margin;
-      const y = ctx.canvas.height - margin - 8 - barH; // leave room for text and logo
+      const y = ctx.canvas.height - margin - 8 - barH;
 
-      // background
       ctx.fillStyle = 'rgba(20,20,28,0.9)';
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-      ctx.lineWidth = 1;
-      roundRect(ctx, x - 8, y - 10, barPx + 16, barH + 26, 8);
-      ctx.fill();
-      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
+      roundRect(ctx, x-8, y-10, barPx+16, barH+26, 8);
+      ctx.fill(); ctx.stroke();
 
-      // bar
       ctx.fillStyle = '#e6e6ea';
       ctx.fillRect(x, y, barPx, barH);
 
-      // label
       ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Arial';
       ctx.fillStyle = '#e6e6ea';
-      const label = barMeters >= 1000 ? (barMeters/1000).toFixed(barMeters%1000===0?0:1) + ' km'
-                                      : Math.round(barMeters) + ' m';
-      ctx.fillText(label, x, y - 4);
+      const label = barMeters>=1000 ? (barMeters/1000).toFixed(barMeters%1000===0?0:1)+' km'
+                                    : Math.round(barMeters)+' m';
+      ctx.fillText(label, x, y-4);
     }
 
-    // Basic keyboard shortcuts
-    document.addEventListener('keydown', (e)=>{
-      if (e.key === 'Escape') setMode('select');
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
-        e.preventDefault(); document.getElementById('btn-export').click();
-      }
-    });
-
-    // If either GeoTIFF throws a network/CORS error early, catch via a quick HEAD check (best-effort)
-    // (Some browsers won’t allow HEAD without CORS; this is just a gentle preflight to give feedback sooner.)
-    ;(async function preflight(){
-      for (const [u,name] of [[URL_MOLA,'MOLA'], [URL_HMC,'HMC']]) {
-        try {
-          const r = await fetch(u, { method:'HEAD', mode:'cors' });
-          if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        } catch (e) {
-          showError(`${name} may be blocked by CORS on this origin. If loading fails, mirror it with CORS enabled or use a dev proxy.`);
-        }
+    // --- Preflight (best-effort) to hint CORS issues early
+    (async function(){
+      for (const [u,name] of [[URL_MOLA,'MOLA'],[URL_HMC,'HMC']]) {
+        try { const r = await fetch(u, {method:'HEAD', mode:'cors'}); if (!r.ok) throw 0; }
+        catch { showError(`${name} may be blocked by CORS on this origin. If it fails to display or export, mirror it with CORS enabled.`); }
       }
     })();
   </script>
