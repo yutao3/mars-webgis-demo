@@ -24,12 +24,9 @@
       crossorigin=""
     />
     <style>
-      :root {
-        color-scheme: dark light;
-      }
+      :root { color-scheme: dark light; }
 
-      html,
-      body {
+      html, body {
         height: 100%;
         margin: 0;
         font-family: "Segoe UI", Tahoma, sans-serif;
@@ -44,6 +41,9 @@
         background: #050505;
       }
 
+      /* Hide any attribution or credit controls entirely */
+      .leaflet-control-attribution { display: none !important; }
+
       .control-panel {
         position: absolute;
         top: 12px;
@@ -57,18 +57,13 @@
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
         backdrop-filter: blur(4px);
       }
-
       .control-panel h1 {
         font-size: 1rem;
         margin: 0 0 6px;
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
-
-      .control-panel .section {
-        margin-bottom: 14px;
-      }
-
+      .control-panel .section { margin-bottom: 14px; }
       .control-panel label {
         display: flex;
         align-items: center;
@@ -76,7 +71,6 @@
         font-size: 0.9rem;
         margin-bottom: 6px;
       }
-
       .layer-entry {
         border: 1px solid rgba(255, 255, 255, 0.12);
         border-radius: 8px;
@@ -84,78 +78,27 @@
         margin-bottom: 8px;
         background: rgba(255, 255, 255, 0.04);
       }
-
-      .layer-entry strong {
-        display: block;
-        font-size: 0.92rem;
-        margin-bottom: 4px;
-      }
-
+      .layer-entry strong { display: block; font-size: 0.92rem; margin-bottom: 4px; }
       .layer-entry small {
-        display: block;
-        font-size: 0.75rem;
-        opacity: 0.75;
-        margin-bottom: 6px;
-        line-height: 1.3;
+        display: block; font-size: 0.75rem; opacity: 0.75; margin-bottom: 6px; line-height: 1.3;
       }
-
-      .layer-status {
-        font-size: 0.75rem;
-        margin-left: 6px;
-        color: #ffd866;
-      }
-
-      .opacity-group {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.78rem;
-      }
-
-      .opacity-group input[type="range"] {
-        flex: 1;
-      }
-
-      button,
-      .control-panel input[type="checkbox"] {
-        cursor: pointer;
-      }
-
-      .actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
+      .layer-status { font-size: 0.75rem; margin-left: 6px; color: #ffd866; }
+      .opacity-group { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; }
+      .opacity-group input[type="range"] { flex: 1; }
+      button, .control-panel input[type="checkbox"] { cursor: pointer; }
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; }
       .actions button {
-        flex: 1;
-        min-width: 120px;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 10px;
-        background: #ff6b35;
-        color: #fff;
-        font-weight: 600;
-        letter-spacing: 0.03em;
+        flex: 1; min-width: 120px; border: none; border-radius: 6px; padding: 8px 10px;
+        background: #ff6b35; color: #fff; font-weight: 600; letter-spacing: 0.03em;
         transition: background 0.2s ease;
       }
+      .actions button.secondary { background: rgba(255, 255, 255, 0.18); }
+      .actions button:hover { background: #ff854f; }
+      .actions button.secondary:hover { background: rgba(255, 255, 255, 0.28); }
 
-      .actions button.secondary {
-        background: rgba(255, 255, 255, 0.18);
-      }
+      .leaflet-container .leaflet-control-measure { font-family: inherit; }
 
-      .actions button:hover {
-        background: #ff854f;
-      }
-
-      .actions button.secondary:hover {
-        background: rgba(255, 255, 255, 0.28);
-      }
-
-      .leaflet-container .leaflet-control-measure {
-        font-family: inherit;
-      }
-
+      /* Scale bar appearance (bottom-right) */
       .leaflet-control-scale {
         font-size: 11px;
         background: rgba(0, 0, 0, 0.6);
@@ -165,6 +108,7 @@
         padding: 2px 6px;
       }
 
+      /* Brand mark (logo) */
       .brand-mark {
         position: absolute;
         bottom: 12px;
@@ -180,31 +124,23 @@
         backdrop-filter: blur(6px);
         pointer-events: none;
       }
-
       .brand-mark img {
         display: block;
-        width: 32px;
-        height: 32px;
+        height: 32px;     /* preserve aspect ratio */
+        width: auto;      /* no squeezing */
+        object-fit: contain;
       }
-
-      .brand-mark span {
-        font-size: 0.8rem;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.8);
-      }
+      .brand-mark span { font-size: 0.8rem; letter-spacing: 0.03em; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); }
 
       @media (max-width: 600px) {
-        .control-panel {
-          right: 12px;
-          left: 12px;
-          max-width: none;
-        }
+        .control-panel { right: 12px; left: 12px; max-width: none; }
       }
     </style>
   </head>
   <body>
     <div id="map"></div>
+
+    <!-- UI panel for layer selection + tools -->
     <aside class="control-panel" aria-label="Mars GIS controls">
       <h1>Mars Web GIS</h1>
       <div class="section" id="layer-list" aria-live="polite"></div>
@@ -213,9 +149,12 @@
         <button id="clear-annotations" type="button" class="secondary">Clear Annotations</button>
       </div>
       <div class="section" style="font-size:0.72rem; opacity:0.75; line-height:1.35;">
-        Tip: HRSC / CTX loads by default; enable the CaSSIS mosaic when you need extra detail. Measurement (ruler icon) and drawing tools sit on the map.
+        Tip: HRSC / CTX loads by default; enable the CaSSIS mosaic when you need extra detail.
+        Measurement (ruler icon) and drawing tools sit on the map.
       </div>
     </aside>
+
+    <!-- Brand -->
     <div class="brand-mark">
       <img src="SAIIL-logo-medium-size.png" alt="SAIIL logo" />
       <span>SAIIL Mars WebGIS Demo</span>
@@ -237,6 +176,11 @@
     <script src="https://unpkg.com/leaflet-measure@3.3.1/dist/leaflet-measure.min.js"></script>
     <script src="https://unpkg.com/leaflet-simple-map-screenshoter@0.4.4/dist/leaflet-simple-map-screenshoter.min.js"></script>
     <script>
+      // Optional: provide a CORS proxy via URL param ?proxy=
+      // Example: ?proxy=https://cors.isomorphic-git.org/
+      const urlParams = new URLSearchParams(location.search);
+      const PROXY = urlParams.get('proxy') || '';
+
       const map = L.map('map', {
         crs: L.CRS.EPSG4326,
         center: [0, 0],
@@ -244,50 +188,31 @@
         zoomControl: true,
         zoomSnap: 0.5,
         zoomDelta: 0.5,
-        preferCanvas: true
+        preferCanvas: true,
+        attributionControl: false // remove "Leaflet | ..." and any layer attributions
       });
 
-      const baseLayer = L.tileLayer.wms('https://planetarymaps.usgs.gov/cgi-bin/mapserv', {
-        map: '/maps/mars_simp_cyl.map',
-        layers: 'MDIM21',
-        format: 'image/png',
-        transparent: false,
-        version: '1.3.0',
-        attribution: 'Imagery: USGS Astrogeology (MDIM 2.1)'
-      }).addTo(map);
-
+      // Panes to control z-order of overlays
       map.createPane('pane-hrsc');
       map.getPane('pane-hrsc').style.zIndex = 500;
       map.createPane('pane-cassis');
       map.getPane('pane-cassis').style.zIndex = 510;
 
-      L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 150 }).addTo(map);
+      // Scale bar on bottom-right as requested
+      L.control.scale({ position: 'bottomright', imperial: false, maxWidth: 150 }).addTo(map);
 
+      // Drawing & editing
       const drawnItems = new L.FeatureGroup();
       map.addLayer(drawnItems);
-
       const drawControl = new L.Control.Draw({
         position: 'topleft',
-        draw: {
-          polygon: true,
-          polyline: true,
-          rectangle: true,
-          circle: false,
-          circlemarker: false,
-          marker: true
-        },
-        edit: {
-          featureGroup: drawnItems,
-          edit: true,
-          remove: true
-        }
+        draw: { polygon: true, polyline: true, rectangle: true, circle: false, circlemarker: false, marker: true },
+        edit: { featureGroup: drawnItems, edit: true, remove: true }
       });
       map.addControl(drawControl);
+      map.on(L.Draw.Event.CREATED, (event) => drawnItems.addLayer(event.layer));
 
-      map.on(L.Draw.Event.CREATED, event => {
-        drawnItems.addLayer(event.layer);
-      });
-
+      // Measure tool
       const measureControl = new L.Control.Measure({
         position: 'topleft',
         primaryLengthUnit: 'kilometers',
@@ -299,6 +224,7 @@
       });
       measureControl.addTo(map);
 
+      // Export current view as PNG (includes annotations & scale)
       const screenshoter = L.simpleMapScreenshoter({
         position: 'topleft',
         screenName: 'mars-map.png',
@@ -308,14 +234,13 @@
         ]
       }).addTo(map);
 
+      // Overlay configurations
       const overlayConfigs = [
         {
           id: 'cassis',
           name: 'CaSSIS Pan SRR Mosaic (RGB)',
-          description:
-            'High-resolution CaSSIS SRR mosaic (8-bit RGB). Large file; initial load may take a while.',
-          url:
-            'https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum-CaSSIS-SRR_MADNet_1.0/cassis_pan_srr_mosaic_hrsc_rgb_colour.tif',
+          description: 'High-resolution CaSSIS SRR mosaic (8-bit RGB). Large file; initial load may take a while.',
+          url: 'https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum-CaSSIS-SRR_MADNet_1.0/cassis_pan_srr_mosaic_hrsc_rgb_colour.tif',
           pane: 'pane-cassis',
           defaultVisible: false,
           resolution: 512
@@ -323,41 +248,39 @@
         {
           id: 'hrsc',
           name: 'HRSC / CTX Reference Mosaic (HMC_11W24_ND5_OXIA_CROP)',
-          description:
-            'CTX / HRSC mosaic (single band). Recommended as contextual layer behind CaSSIS imagery.',
-          url:
-            'https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif',
+          description: 'CTX / HRSC mosaic (single band). Recommended as contextual layer behind CaSSIS imagery.',
+          url: 'https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif',
           pane: 'pane-hrsc',
           defaultVisible: true,
           resolution: 512,
-          opacity: 0.85
+          opacity: 0.9
         }
       ];
 
       const layerList = document.getElementById('layer-list');
       const state = new Map();
 
+      function toFetchUrl(url) {
+        // If a proxy is provided, prefix it. Some proxies expect the full URL appended;
+        // feel free to adapt to your proxy’s contract.
+        return PROXY ? (PROXY + url) : url;
+      }
+
       function createColorFn(georaster, noDataValue) {
         if (georaster.numberOfRasters >= 3) {
-          return values => {
+          return (values) => {
             if (!values) return null;
             const [r, g, b] = values;
             if ([r, g, b].some(v => v === null || v === undefined)) return null;
-            if (
-              noDataValue !== undefined &&
-              ([r, g, b].every(v => v === noDataValue) || r === noDataValue)
-            ) {
-              return null;
-            }
+            if (noDataValue !== undefined && ([r, g, b].every(v => v === noDataValue) || r === noDataValue)) return null;
             return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
           };
         }
-
         const min = Array.isArray(georaster.mins) ? georaster.mins[0] : georaster.min;
         const max = Array.isArray(georaster.maxs) ? georaster.maxs[0] : georaster.max;
         const lo = Number.isFinite(min) ? min : 0;
         const hi = Number.isFinite(max) ? max : lo + 1;
-        return values => {
+        return (values) => {
           const value = values && values[0];
           if (value === null || value === undefined) return null;
           if (noDataValue !== undefined && value === noDataValue) return null;
@@ -369,25 +292,17 @@
       }
 
       async function ensureLayer(config, statusEl) {
-        if (state.has(config.id) && state.get(config.id).layer) {
-          return state.get(config.id);
-        }
-        if (state.has(config.id) && state.get(config.id).promise) {
-          return state.get(config.id).promise;
-        }
+        if (state.has(config.id) && state.get(config.id).layer) return state.get(config.id);
+        if (state.has(config.id) && state.get(config.id).promise) return state.get(config.id).promise;
 
         const deferred = (async () => {
           statusEl.textContent = 'loading…';
           try {
-            const response = await fetch(config.url, {
-              mode: 'cors'
-            });
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
+            const response = await fetch(toFetchUrl(config.url), { mode: 'cors' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const arrayBuffer = await response.arrayBuffer();
             const georaster = await parseGeoraster(arrayBuffer);
-            const options = {
+            const layer = new GeoRasterLayer({
               georaster,
               pane: config.pane,
               resolution: config.resolution || 256,
@@ -395,11 +310,8 @@
               updateWhenIdle: true,
               pixelValuesToColorFn: createColorFn(georaster, georaster.noDataValue),
               useWebWorkers: false
-            };
-            const layer = new GeoRasterLayer(options);
-            layer.on('load', () => {
-              statusEl.textContent = '';
             });
+            layer.on('load', () => { statusEl.textContent = ''; });
             const result = { layer, georaster };
             state.set(config.id, result);
             return result;
@@ -423,92 +335,81 @@
         map.fitBounds(bounds, { padding: [20, 20] });
       }
 
-      overlayConfigs.forEach((config, index) => {
+      // Build the layer UI and wire up interactions
+      overlayConfigs.forEach((config) => {
         const wrapper = document.createElement('div');
         wrapper.className = 'layer-entry';
+
         const label = document.createElement('label');
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = Boolean(config.defaultVisible);
         checkbox.setAttribute('data-layer', config.id);
         checkbox.id = `layer-${config.id}`;
+
         const title = document.createElement('strong');
         title.textContent = config.name;
+
         const status = document.createElement('span');
         status.className = 'layer-status';
+
         const description = document.createElement('small');
         description.textContent = config.description;
+
         label.appendChild(checkbox);
         label.appendChild(title);
         label.appendChild(status);
-        wrapper.appendChild(label);
-        wrapper.appendChild(description);
 
         const opacityGroup = document.createElement('div');
         opacityGroup.className = 'opacity-group';
         const opacityLabel = document.createElement('span');
         opacityLabel.textContent = 'Opacity';
         const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.min = '0';
-        slider.max = '1';
-        slider.step = '0.05';
-        slider.value = String(config.opacity ?? 1);
-        slider.disabled = true;
+        slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05';
+        slider.value = String(config.opacity ?? 1); slider.disabled = true;
         opacityGroup.appendChild(opacityLabel);
         opacityGroup.appendChild(slider);
-        wrapper.appendChild(opacityGroup);
 
+        wrapper.appendChild(label);
+        wrapper.appendChild(description);
+        wrapper.appendChild(opacityGroup);
         layerList.appendChild(wrapper);
 
-        checkbox.addEventListener('change', async event => {
+        checkbox.addEventListener('change', async (event) => {
           if (event.target.checked) {
             try {
-              const result = await ensureLayer(config, status);
-              const { layer, georaster } = result;
+              const { layer, georaster } = await ensureLayer(config, status);
               layer.addTo(map);
               slider.disabled = false;
               slider.value = String(layer.options.opacity ?? 1);
-              if (!config._fitted) {
-                fitToLayer(georaster);
-                config._fitted = true;
-              }
+              if (!config._fitted) { fitToLayer(georaster); config._fitted = true; }
             } catch (error) {
-              alert(
-                `Unable to load ${config.name}. The remote host may be missing CORS headers or range request support. See console for details.`
-              );
+              alert(`Unable to load ${config.name}. The remote host may be missing CORS headers or range request support. See console for details.`);
               checkbox.checked = false;
             } finally {
-              if (status.textContent === 'loading…') {
-                status.textContent = '';
-              }
+              if (status.textContent === 'loading…') status.textContent = '';
             }
           } else {
             slider.disabled = true;
             const info = state.get(config.id);
-            if (info && info.layer && map.hasLayer(info.layer)) {
-              map.removeLayer(info.layer);
-            }
+            if (info && info.layer && map.hasLayer(info.layer)) map.removeLayer(info.layer);
           }
         });
 
-        slider.addEventListener('input', event => {
+        slider.addEventListener('input', (event) => {
           const opacity = parseFloat(event.target.value);
           const info = state.get(config.id);
-          if (info && info.layer) {
-            info.layer.setOpacity(opacity);
-          }
+          if (info && info.layer) info.layer.setOpacity(opacity);
         });
 
-        if (checkbox.checked) {
-          checkbox.dispatchEvent(new Event('change'));
-        }
+        // Auto-load defaults
+        if (checkbox.checked) checkbox.dispatchEvent(new Event('change'));
       });
 
-      document.getElementById('clear-annotations').addEventListener('click', () => {
-        drawnItems.clearLayers();
-      });
+      // Clear annotations
+      document.getElementById('clear-annotations').addEventListener('click', () => drawnItems.clearLayers());
 
+      // Download PNG
       document.getElementById('download-png').addEventListener('click', async () => {
         try {
           const blob = await screenshoter.takeScreen('blob', { mimeType: 'image/png' });
