@@ -5,7 +5,7 @@
   <title>SAIIL — Mars Web GIS Prototype (OpenLayers)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="favicon.ico" />
-  <!-- OpenLayers (no extra GeoTIFF.js; OL bundles what it needs) -->
+  <!-- OpenLayers ONLY (no extra GeoTIFF.js, no Leaflet) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
   <style>
@@ -41,7 +41,7 @@
     .map { width:100%; height:100%; }
     .topbar { position:absolute; left:12px; top:12px; z-index:10; pointer-events:none; display:flex; gap:8px; flex-wrap:wrap; }
     .chip { pointer-events:auto; background:rgba(0,0,0,0.35); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:999px; font-size:12px; }
-    .error { position:absolute; right:12px; top:12px; z-index:10; pointer-events:none; background:#2b1111; color:#ffd7d7; border:1px solid #723; padding:10px 12px; border-radius:10px; max-width:420px; display:none; }
+    .error { position:absolute; right:12px; top:12px; z-index:10; pointer-events:auto; background:#2b1111; color:#ffd7d7; border:1px solid #723; padding:10px 12px; border-radius:10px; max-width:520px; display:none; }
 
     /* Bottom-right: scale + logo */
     .br { position:absolute; right:10px; bottom:10px; z-index:10; display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
@@ -72,18 +72,18 @@
         <h3>Basemap (MOLA)</h3>
         <label><input type="radio" name="basemap" id="bm-color" checked> <span>MOLA Colour (XYZ)</span></label>
         <label><input type="radio" name="basemap" id="bm-hill"> <span>MOLA Hillshade (XYZ)</span></label>
-        <div class="help small">Global XYZ tiles from OpenPlanetary. Colour is default.</div>
+        <div class="help small">Global XYZ tiles (OpenPlanetary). Colour is default.</div>
       </div>
 
       <div class="section layers">
-        <h3>Overlays (ESA GeoTIFF)</h3>
+        <h3>Overlays (ESA GeoTIFF, lazy-loaded)</h3>
         <label><input type="checkbox" id="chk-hrsc"> <span>HRSC mosaic (HMC_11W24_ND5_OXIA_CROP.tif)</span></label>
         <label><input type="checkbox" id="chk-ctx"> <span>CTX ORI (F23_044811…_ORI.tif)</span></label>
         <div class="btn-row" style="margin-top:8px;">
           <button id="btn-zoom-hrsc">Zoom to HRSC</button>
           <button id="btn-zoom-ctx">Zoom to CTX</button>
         </div>
-        <div class="help small">These load from ESA and may be blocked by CORS on your domain.</div>
+        <div class="help small">These load from ESA and may be blocked by CORS on your domain. They are created only when toggled on.</div>
       </div>
 
       <div class="section">
@@ -113,7 +113,7 @@
     <main id="map">
       <div id="mapCanvas" class="map"></div>
       <div class="topbar">
-        <div class="chip">Pan: drag • Zoom: wheel / pinch • Reset: button</div>
+        <div id="globalWarn" class="chip" style="display:none;"></div>
       </div>
       <div id="err" class="error"></div>
       <div class="br">
@@ -130,7 +130,7 @@
     const ImageLayer = ol.layer.Image;
     const TileLayer = ol.layer.Tile;
     const VectorLayer = ol.layer.Vector;
-    const GeoTIFF = ol.source.GeoTIFF;
+    const GeoTIFFSource = ol.source.GeoTIFF;
     const XYZ = ol.source.XYZ;
     const VectorSource = ol.source.Vector;
     const {Projection} = ol.proj;
@@ -146,28 +146,36 @@
     const marsProj = new Projection({ code:'MARS:4326', units:'degrees', extent:[-180,-90,180,90], global:true, worldExtent:[-180,-90,180,90] });
     ol.proj.addProjection(marsProj);
 
-    // --- Basemaps (XYZ tiles, CORS-friendly)
-    const XYZ_MOLA_COLOR = "http://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_color-noshade_global/{z}/{x}/{y}.png";
+    // --- Basemaps (HTTPS, CORS-friendly)
+    const XYZ_MOLA_COLOR = "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_color-noshade_global/{z}/{x}/{y}.png";
     const XYZ_MOLA_HILL  = "https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/mola_hillshade/{z}/{x}/{y}.png";
-    const colorBase = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_COLOR, crossOrigin: '' }), visible: true, zIndex: 0 });
-    const hillBase  = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_HILL,  crossOrigin: '' }), visible: false, zIndex: 0 });
+    const colorBase = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_COLOR, crossOrigin: 'anonymous' }), visible: true, zIndex: 0 });
+    const hillBase  = new TileLayer({ source: new XYZ({ url: XYZ_MOLA_HILL,  crossOrigin: 'anonymous' }), visible: false, zIndex: 0 });
 
-    // --- ESA overlays (GeoTIFF). Require CORS on remote host to show/export.
+    // --- ESA GeoTIFF URLs (lazy creation)
     const URL_HRSC = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif";
     const URL_CTX  = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/CTX-ORIs/F23_044811_1985_XN_18N024W-F23_044956_1984_XN_18N024W-ORI.tif";
 
-    function makeGeoTiffLayer(url, z) {
-      const src = new GeoTIFF({
+    // Layers (lazy)
+    let hrscLayer = null;
+    let ctxLayer  = null;
+
+    function createGeoTiffLayer(url, zIndex){
+      // Use OpenLayers' own GeoTIFF source; do NOT load any external GeoTIFF.js in HTML.
+      const src = new GeoTIFFSource({
         sources: [{ url }],
-        convertToRGB: true,   // display-friendly
+        convertToRGB: true,
         normalize: false,
         interpolate: true
       });
-      const lyr = new ImageLayer({ source: src, visible: false, zIndex: z });
+      const lyr = new ImageLayer({ source: src, visible: true, zIndex });
+      // Error surfacing
+      src.on('change', () => {
+        const st = src.getState?.();
+        if (st === 'error') showError('Failed to load ' + url + ' (likely CORS on remote host).');
+      });
       return lyr;
     }
-    const hrscLayer = makeGeoTiffLayer(URL_HRSC, 10); // below CTX
-    const ctxLayer  = makeGeoTiffLayer(URL_CTX,  11); // above HRSC
 
     // --- Annotations
     const vectorSource = new VectorSource();
@@ -187,7 +195,7 @@
     // --- Map
     const map = new Map({
       target: 'mapCanvas',
-      layers: [colorBase, hillBase, hrscLayer, ctxLayer, vectorLayer],
+      layers: [colorBase, hillBase, vectorLayer],
       view: new View({ projection: marsProj, center:[0,0], zoom:2, minZoom:1, maxZoom:22 }),
       controls: defaultControls({ zoom: true, attribution:false })
     });
@@ -197,9 +205,16 @@
     scale.setTarget(document.getElementById('scaleSlot'));
     map.addControl(scale);
 
-    // --- Error UI
+    // --- UI helpers
     const errBox = document.getElementById('err');
     function showError(msg){ errBox.textContent = msg; errBox.style.display='block'; clearTimeout(showError._t); showError._t = setTimeout(()=>errBox.style.display='none', 9000); }
+
+    // Warn if a global GeoTIFF.js is present (common cause of "GeoTIFF.fromUrl is not a function")
+    if (window.GeoTIFF) {
+      const warn = document.getElementById('globalWarn');
+      warn.style.display = 'block';
+      warn.textContent = 'Detected global GeoTIFF.js on this page. Please remove any <script src=".../GeoTIFF.js"> tag — it conflicts with OpenLayers and causes "GeoTIFF.fromUrl is not a function".';
+    }
 
     // --- Basemap toggles
     document.getElementById('bm-color').addEventListener('change', (e)=> {
@@ -209,28 +224,49 @@
       if (e.target.checked){ colorBase.setVisible(false); hillBase.setVisible(true); }
     });
 
-    // --- Overlay toggles
+    // --- Overlay toggles (lazy create/remove)
     const chkHRSC = document.getElementById('chk-hrsc');
     const chkCTX  = document.getElementById('chk-ctx');
-    chkHRSC.addEventListener('change', ()=> hrscLayer.setVisible(chkHRSC.checked));
-    chkCTX.addEventListener('change',  ()=> ctxLayer.setVisible(chkCTX.checked));
 
-    // --- Fit helpers (zoom to layer extent when available)
-    function fitToLayer(layer){
-      const src = layer.getSource();
-      const extent = src.getImageExtent?.();
-      if (extent) map.getView().fit(extent, { padding:[20,20,20,20], duration:600 });
-    }
-    document.getElementById('btn-zoom-hrsc').onclick = ()=> fitToLayer(hrscLayer);
-    document.getElementById('btn-zoom-ctx').onclick  = ()=> fitToLayer(ctxLayer);
-
-    // Warn early if CORS blocks overlays
-    [ [hrscLayer,'HRSC GeoTIFF'], [ctxLayer,'CTX GeoTIFF'] ].forEach(([layer,name])=>{
-      layer.getSource().on('change', ()=> {
-        const st = layer.getSource().getState?.();
-        if (st === 'error') showError(`${name} failed to load (likely CORS). Mirror on your domain with CORS enabled.`);
-      });
+    chkHRSC.addEventListener('change', ()=> {
+      if (chkHRSC.checked) {
+        if (!hrscLayer) {
+          hrscLayer = createGeoTiffLayer(URL_HRSC, 10);
+          map.addLayer(hrscLayer);
+        } else {
+          hrscLayer.setVisible(true);
+        }
+      } else if (hrscLayer) {
+        hrscLayer.setVisible(false);
+      }
     });
+
+    chkCTX.addEventListener('change', ()=> {
+      if (chkCTX.checked) {
+        if (!ctxLayer) {
+          ctxLayer = createGeoTiffLayer(URL_CTX, 11); // above HRSC
+          map.addLayer(ctxLayer);
+        } else {
+          ctxLayer.setVisible(true);
+        }
+      } else if (ctxLayer) {
+        ctxLayer.setVisible(false);
+      }
+    });
+
+    // --- Zoom to layer extent (only if created & ready)
+    document.getElementById('btn-zoom-hrsc').onclick = ()=> {
+      if (!hrscLayer) return showError('HRSC not loaded yet. Tick the HRSC checkbox first.');
+      const src = hrscLayer.getSource(); const ex = src.getImageExtent?.();
+      if (ex) map.getView().fit(ex, { padding:[20,20,20,20], duration:600 });
+      else showError('HRSC extent not available yet. Try again in a moment.');
+    };
+    document.getElementById('btn-zoom-ctx').onclick = ()=> {
+      if (!ctxLayer) return showError('CTX not loaded yet. Tick the CTX checkbox first.');
+      const src = ctxLayer.getSource(); const ex = src.getImageExtent?.();
+      if (ex) map.getView().fit(ex, { padding:[20,20,20,20], duration:600 });
+      else showError('CTX extent not available yet. Try again in a moment.');
+    };
 
     // --- Interactions: select/modify + draw
     const select = new Select();
@@ -318,7 +354,7 @@
         const url = out.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = 'saiil-mars-map.png'; a.click();
       } catch (e) {
         console.error(e);
-        showError('Export blocked by browser due to cross-origin canvas. Ensure remote layers are CORS-enabled.');
+        showError('Export blocked by browser due to cross-origin canvas. Ensure remote overlays are CORS-enabled.');
       }
     };
 
