@@ -14,14 +14,10 @@
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
-      integrity="sha256-zLrzE8CbnMD4HzyBbs6k8ZZrVSu2VvulaHYodNs/WSY="
-      crossorigin=""
     />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet-measure@3.3.1/dist/leaflet-measure.css"
-      integrity="sha256-9n6mfm8KbIOnZhgb71CkHyIx9/odRa0gh6+acpIwNdc="
-      crossorigin=""
     />
     <style>
       :root { color-scheme: dark light; }
@@ -135,6 +131,12 @@
       @media (max-width: 600px) {
         .control-panel { right: 12px; left: 12px; max-width: none; }
       }
+    
+      /* Fallback styles if leaflet-measure.css is blocked */
+      .leaflet-control-measure { background: rgba(18,18,18,.9); color:#fff; border-radius:6px; }
+      .leaflet-control-measure a { display:inline-block; padding:6px 8px; text-decoration:none; }
+      .leaflet-control-measure-toggle { font-weight:600; }
+
     </style>
   </head>
   <body>
@@ -170,8 +172,6 @@
     <script src="https://unpkg.com/georaster-layer-for-leaflet@1.8.2/dist/georaster-layer-for-leaflet.min.js"></script>
     <script
       src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"
-      integrity="sha256-sb2sMSmc5QwDFi1Cdm42Hcps225y7sY9qsK0kGugK7I="
-      crossorigin=""
     ></script>
     <script src="https://unpkg.com/leaflet-measure@3.3.1/dist/leaflet-measure.min.js"></script>
     <script src="https://unpkg.com/leaflet-simple-map-screenshoter@0.4.4/dist/leaflet-simple-map-screenshoter.min.js"></script>
