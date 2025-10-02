@@ -1,434 +1,493 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Mars Web GIS Prototype</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
-    />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet-measure@3.3.1/dist/leaflet-measure.css"
-    />
-    <style>
-      :root { color-scheme: dark light; }
+<head>
+  <meta charset="UTF-8" />
+  <title>SAIIL Mars Web GIS Prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="favicon.ico" />
+  <!-- OpenLayers (no SRI to avoid integrity/CORS pitfalls) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
+  <style>
+    html, body { margin:0; height:100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
+    #map { width:100%; height:100%; position:relative; background:#0a0a14; } /* deep space vibe */
+    /* Controls panel */
+    .panel {
+      position:absolute; top:10px; left:10px; z-index:1000;
+      background:rgba(20,20,28,0.9); color:#e6e6ea; border:1px solid #2a2a3a;
+      border-radius:12px; padding:10px 12px; backdrop-filter: blur(4px); min-width: 260px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+    .panel h3 { margin:6px 0 8px; font-size:14px; font-weight:600; letter-spacing:0.2px; }
+    .group { margin-bottom:10px; }
+    .group label { display:block; margin:6px 0; cursor:pointer; }
+    .row { display:flex; gap:6px; flex-wrap:wrap; }
+    .row button, .row select {
+      appearance:none; border:1px solid #3a3a4a; background:#171722; color:#e6e6ea; border-radius:10px;
+      padding:7px 10px; cursor:pointer; font-size:13px;
+    }
+    .row button:hover { border-color:#6b6bff; }
+    .row button.active { border-color:#9f9fff; box-shadow: 0 0 0 2px rgba(120,120,255,0.25) inset; }
+    .small { font-size:12px; opacity:0.9; }
+    .error {
+      position:absolute; top:10px; right:10px; z-index:1000;
+      background:#2b1111; color:#ffd7d7; border:1px solid #723; padding:10px 12px; border-radius:10px;
+      max-width:420px; display:none;
+    }
+    /* Bottom-right overlay: scalebar + logo */
+    .br-wrap {
+      position:absolute; right:10px; bottom:10px; z-index:1000; display:flex; flex-direction:column; align-items:flex-end; gap:8px;
+    }
+    /* We'll draw our OWN scale bar on export, but on-map we use OL's ScaleLine styled to sit bottom-right */
+    .ol-scale-line {
+      position:static; /* keep inside .br-wrap stack */
+      background:rgba(20,20,28,0.9); color:#e6e6ea; border:1px solid #2a2a3a; border-radius:8px; padding:2px 6px;
+    }
+    .logo {
+      width:160px; height:auto; opacity:0.95; border-radius:10px; border:1px solid #2a2a3a; background:#0f0f16;
+      padding:6px;
+    }
+    /* Measure tooltip */
+    .tooltip {
+      position: absolute; background: rgba(20,20,28,0.9); color: #fff; padding: 4px 8px;
+      border: 1px solid #2a2a3a; border-radius: 6px; white-space: nowrap; pointer-events: none;
+      transform: translate(-50%, -120%);
+      font-size:12px;
+    }
+    .tooltip.hidden { display:none; }
 
-      html, body {
-        height: 100%;
-        margin: 0;
-        font-family: "Segoe UI", Tahoma, sans-serif;
-        background: #0a0a0a;
-        color: #f5f5f5;
-      }
+    /* Simple credits */
+    .credits {
+      position:absolute; right:10px; top:10px; z-index:1000; font-size:11px; color:#bbb;
+      background:rgba(0,0,0,0.35); padding:4px 6px; border-radius:8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
 
-      #map {
-        height: 100%;
-        width: 100%;
-        position: relative;
-        background: #050505;
-      }
-
-      /* Hide any attribution or credit controls entirely */
-      .leaflet-control-attribution { display: none !important; }
-
-      .control-panel {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 1000;
-        max-width: 320px;
-        background: rgba(18, 18, 18, 0.92);
-        color: #f5f5f5;
-        padding: 12px 14px;
-        border-radius: 10px;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(4px);
-      }
-      .control-panel h1 {
-        font-size: 1rem;
-        margin: 0 0 6px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-      .control-panel .section { margin-bottom: 14px; }
-      .control-panel label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 0.9rem;
-        margin-bottom: 6px;
-      }
-      .layer-entry {
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 8px;
-        padding: 8px;
-        margin-bottom: 8px;
-        background: rgba(255, 255, 255, 0.04);
-      }
-      .layer-entry strong { display: block; font-size: 0.92rem; margin-bottom: 4px; }
-      .layer-entry small {
-        display: block; font-size: 0.75rem; opacity: 0.75; margin-bottom: 6px; line-height: 1.3;
-      }
-      .layer-status { font-size: 0.75rem; margin-left: 6px; color: #ffd866; }
-      .opacity-group { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; }
-      .opacity-group input[type="range"] { flex: 1; }
-      button, .control-panel input[type="checkbox"] { cursor: pointer; }
-      .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-      .actions button {
-        flex: 1; min-width: 120px; border: none; border-radius: 6px; padding: 8px 10px;
-        background: #ff6b35; color: #fff; font-weight: 600; letter-spacing: 0.03em;
-        transition: background 0.2s ease;
-      }
-      .actions button.secondary { background: rgba(255, 255, 255, 0.18); }
-      .actions button:hover { background: #ff854f; }
-      .actions button.secondary:hover { background: rgba(255, 255, 255, 0.28); }
-
-      .leaflet-container .leaflet-control-measure { font-family: inherit; }
-
-      /* Scale bar appearance (bottom-right) */
-      .leaflet-control-scale {
-        font-size: 11px;
-        background: rgba(0, 0, 0, 0.6);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        border-radius: 3px;
-        padding: 2px 6px;
-      }
-
-      /* Brand mark (logo) */
-      .brand-mark {
-        position: absolute;
-        bottom: 12px;
-        right: 12px;
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        background: rgba(18, 18, 18, 0.82);
-        border-radius: 999px;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-        backdrop-filter: blur(6px);
-        pointer-events: none;
-      }
-      .brand-mark img {
-        display: block;
-        height: 32px;     /* preserve aspect ratio */
-        width: auto;      /* no squeezing */
-        object-fit: contain;
-      }
-      .brand-mark span { font-size: 0.8rem; letter-spacing: 0.03em; text-transform: uppercase; color: rgba(255, 255, 255, 0.8); }
-
-      @media (max-width: 600px) {
-        .control-panel { right: 12px; left: 12px; max-width: none; }
-      }
-    
-      /* Fallback styles if leaflet-measure.css is blocked */
-      .leaflet-control-measure { background: rgba(18,18,18,.9); color:#fff; border-radius:6px; }
-      .leaflet-control-measure a { display:inline-block; padding:6px 8px; text-decoration:none; }
-      .leaflet-control-measure-toggle { font-weight:600; }
-
-    </style>
-  </head>
-  <body>
-    <div id="map"></div>
-
-    <!-- UI panel for layer selection + tools -->
-    <aside class="control-panel" aria-label="Mars GIS controls">
-      <h1>Mars Web GIS</h1>
-      <div class="section" id="layer-list" aria-live="polite"></div>
-      <div class="section actions">
-        <button id="download-png" type="button">Download PNG</button>
-        <button id="clear-annotations" type="button" class="secondary">Clear Annotations</button>
-      </div>
-      <div class="section" style="font-size:0.72rem; opacity:0.75; line-height:1.35;">
-        Tip: HRSC / CTX loads by default; enable the CaSSIS mosaic when you need extra detail.
-        Measurement (ruler icon) and drawing tools sit on the map.
-      </div>
-    </aside>
-
-    <!-- Brand -->
-    <div class="brand-mark">
-      <img src="SAIIL-logo-medium-size.png" alt="SAIIL logo" />
-      <span>SAIIL Mars WebGIS Demo</span>
+  <div class="panel" id="ui">
+    <div class="group">
+      <h3>Layers</h3>
+      <label><input type="checkbox" id="chk-mola" checked> MOLA 463 m (default)</label>
+      <label><input type="checkbox" id="chk-hmc"> HMC_11W24_ND5 (CTX/HiRISE composite)</label>
+      <div class="small">The map auto-zooms to MOLA on load.</div>
     </div>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-    <script src="https://unpkg.com/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
-    <script src="https://unpkg.com/georaster@1.7.1/dist/georaster.browserify.min.js"></script>
-    <script src="https://unpkg.com/georaster-layer-for-leaflet@1.8.2/dist/georaster-layer-for-leaflet.min.js"></script>
-    <script
-      src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"
-    ></script>
-    <script src="https://unpkg.com/leaflet-measure@3.3.1/dist/leaflet-measure.min.js"></script>
-    <script src="https://unpkg.com/leaflet-simple-map-screenshoter@0.4.4/dist/leaflet-simple-map-screenshoter.min.js"></script>
-    <script>
-      // Optional: provide a CORS proxy via URL param ?proxy=
-      // Example: ?proxy=https://cors.isomorphic-git.org/
-      const urlParams = new URLSearchParams(location.search);
-      const PROXY = urlParams.get('proxy') || '';
+    <div class="group">
+      <h3>Annotations & Measure</h3>
+      <div class="row">
+        <button id="btn-select" title="Select/Move features">Select</button>
+        <button id="btn-point" title="Add points">Point</button>
+        <button id="btn-line" title="Add line (measure length)">Line</button>
+        <button id="btn-poly" title="Add polygon (measure area)">Polygon</button>
+        <button id="btn-clear" title="Clear all annotations">Clear</button>
+      </div>
+      <div class="small">Distances/areas computed on a Mars sphere (R≈3,396,190 m).</div>
+    </div>
 
-      const map = L.map('map', {
-        crs: L.CRS.EPSG4326,
-        center: [0, 0],
-        zoom: 3,
-        zoomControl: true,
-        zoomSnap: 0.5,
-        zoomDelta: 0.5,
-        preferCanvas: true,
-        attributionControl: false // remove "Leaflet | ..." and any layer attributions
-      });
+    <div class="group">
+      <h3>Print</h3>
+      <div class="row">
+        <button id="btn-export">Export PNG</button>
+      </div>
+      <div class="small">Exports layers, annotations, and a drawn scale bar.</div>
+    </div>
+  </div>
 
-      // Panes to control z-order of overlays
-      map.createPane('pane-hrsc');
-      map.getPane('pane-hrsc').style.zIndex = 500;
-      map.createPane('pane-cassis');
-      map.getPane('pane-cassis').style.zIndex = 510;
+  <div class="credits">© SAIIL – Mars Web GIS Prototype</div>
 
-      // Scale bar on bottom-right as requested
-      L.control.scale({ position: 'bottomright', imperial: false, maxWidth: 150 }).addTo(map);
+  <div class="error" id="err"></div>
 
-      // Drawing & editing
-      const drawnItems = new L.FeatureGroup();
-      map.addLayer(drawnItems);
-      const drawControl = new L.Control.Draw({
-        position: 'topleft',
-        draw: { polygon: true, polyline: true, rectangle: true, circle: false, circlemarker: false, marker: true },
-        edit: { featureGroup: drawnItems, edit: true, remove: true }
-      });
-      map.addControl(drawControl);
-      map.on(L.Draw.Event.CREATED, (event) => drawnItems.addLayer(event.layer));
+  <!-- Bottom-right stack: ScaleLine + Logo -->
+  <div class="br-wrap">
+    <div id="scaleSlot"></div>
+    <img class="logo" src="SAIIL-logo-medium-size.png" alt="SAIIL logo" onerror="this.style.display='none'">
+  </div>
 
-      // Measure tool
-      const measureControl = new L.Control.Measure({
-        position: 'topleft',
-        primaryLengthUnit: 'kilometers',
-        secondaryLengthUnit: 'meters',
-        primaryAreaUnit: 'sqkilometers',
-        secondaryAreaUnit: 'hectares',
-        activeColor: '#ff6b35',
-        completedColor: '#3ddc97'
-      });
-      measureControl.addTo(map);
+  <script>
+    // Aliases (OpenLayers UMD bundle)
+    const Map = ol.Map;
+    const View = ol.View;
+    const TileLayer = ol.layer.Tile;
+    const ImageLayer = ol.layer.Image;
+    const VectorLayer = ol.layer.Vector;
+    const GeoTIFF = ol.source.GeoTIFF;
+    const VectorSource = ol.source.Vector;
+    const ImageStatic = ol.source.ImageStatic;
+    const OSM = ol.source.OSM;
+    const {fromLonLat, addProjection, addCoordinateTransforms, Projection} = ol.proj;
+    const {ScaleLine, defaults: defaultControls} = ol.control;
+    const {Draw, Modify, Select, defaults: defaultInteractions} = ol.interaction;
+    const {Style, Stroke, Fill, Circle: CircleStyle} = ol.style;
+    const {LineString, Polygon} = ol.geom;
+    const Overlay = ol.Overlay;
+    const {getArea, getLength} = ol.sphere;
 
-      // Export current view as PNG (includes annotations & scale)
-      const screenshoter = L.simpleMapScreenshoter({
-        position: 'topleft',
-        screenName: 'mars-map.png',
-        hideElementsWithSelectors: [
-          '.leaflet-control-container .leaflet-top.leaflet-left',
-          '.leaflet-control-container .leaflet-top.leaflet-right'
-        ]
-      }).addTo(map);
+    // === Mars spherical model ===
+    // Mars_GCS_2000 is geographic lon/lat on a Mars sphere (no EPSG). We'll define a custom 'MARS:4326'.
+    const MARS_RADIUS = 3396190; // meters (mean radius)
+    const marsProj = new Projection({
+      code: 'MARS:4326',
+      units: 'degrees',
+      extent: [-180, -90, 180, 90],
+      global: true,
+      worldExtent: [-180, -90, 180, 90]
+    });
+    ol.proj.addProjection(marsProj);
 
-      // Overlay configurations
-      const overlayConfigs = [
-        {
-          id: 'cassis',
-          name: 'CaSSIS Pan SRR Mosaic (RGB)',
-          description: 'High-resolution CaSSIS SRR mosaic (8-bit RGB). Large file; initial load may take a while.',
-          url: 'https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum-CaSSIS-SRR_MADNet_1.0/cassis_pan_srr_mosaic_hrsc_rgb_colour.tif',
-          pane: 'pane-cassis',
-          defaultVisible: false,
-          resolution: 512
-        },
-        {
-          id: 'hrsc',
-          name: 'HRSC / CTX Reference Mosaic (HMC_11W24_ND5_OXIA_CROP)',
-          description: 'CTX / HRSC mosaic (single band). Recommended as contextual layer behind CaSSIS imagery.',
-          url: 'https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif',
-          pane: 'pane-hrsc',
-          defaultVisible: true,
-          resolution: 512,
-          opacity: 0.9
+    // Utility: meters per pixel at current view center (horizontally), for Mars sphere in degrees
+    function metersPerPixel(map) {
+      const size = map.getSize();
+      if (!size) return 0;
+      const px = 1;
+      const center = map.getView().getCenter();
+      if (!center) return 0;
+      const res = map.getView().getResolution(); // degrees per pixel
+      if (!res) return 0;
+
+      const lon = center[0], lat = center[1];
+      const lon2 = lon + res * px;
+      const c1 = [lon, lat];
+      const c2 = [lon2, lat];
+      return getLength(new LineString([c1, c2], 'XY'), {radius: MARS_RADIUS}) / px;
+    }
+
+    // === Annotation layer & styles ===
+    const vectorSource = new VectorSource();
+    const vectorLayer = new VectorLayer({
+      source: vectorSource,
+      style: feature => {
+        const geom = feature.getGeometry();
+        const baseStroke = new Stroke({ color: '#9f9fff', width: 2 });
+        const fill = new Fill({ color: 'rgba(159,159,255,0.15)' });
+        if (geom instanceof LineString) {
+          return new Style({ stroke: baseStroke });
+        } else if (geom instanceof Polygon) {
+          return new Style({ stroke: baseStroke, fill });
+        } else {
+          return new Style({ image: new CircleStyle({ radius:5, fill: new Fill({color:'#9f9fff'}), stroke: new Stroke({color:'#333', width:1}) }) });
         }
-      ];
-
-      const layerList = document.getElementById('layer-list');
-      const state = new Map();
-
-      function toFetchUrl(url) {
-        // If a proxy is provided, prefix it. Some proxies expect the full URL appended;
-        // feel free to adapt to your proxy’s contract.
-        return PROXY ? (PROXY + url) : url;
       }
+    });
 
-      function createColorFn(georaster, noDataValue) {
-        if (georaster.numberOfRasters >= 3) {
-          return (values) => {
-            if (!values) return null;
-            const [r, g, b] = values;
-            if ([r, g, b].some(v => v === null || v === undefined)) return null;
-            if (noDataValue !== undefined && ([r, g, b].every(v => v === noDataValue) || r === noDataValue)) return null;
-            return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-          };
+    // === Basemap GeoTIFF layers ===
+    const URL_MOLA = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/MOLA_463m_OXIA_CROP_HRSC-Proj.tif";
+    const URL_HMC  = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif";
+
+    // Each as an Image layer backed by GeoTIFF source (geotiff.js inside OL). If CORS blocks, we catch and notify.
+    function makeGeoTiffLayer(url, title) {
+      const src = new GeoTIFF({
+        sources: [{ url }],
+        convertToRGB: true, // for 8-bit single-band, display as grayscale
+        interpolate: true,
+        // normalize false keeps original 8-bit range; let OL stretch; if needed set false:
+        normalize: false
+      });
+      const layer = new ImageLayer({ source: src, visible: title.includes('MOLA') }); // MOLA on by default
+      layer.set('title', title);
+      return layer;
+    }
+
+    const molaLayer = makeGeoTiffLayer(URL_MOLA, 'MOLA 463m');
+    const hmcLayer  = makeGeoTiffLayer(URL_HMC,  'HMC 11W24 ND5');
+
+    // === Map & view ===
+    const map = new Map({
+      target: 'map',
+      layers: [
+        // Optional tiny dark base in case GeoTIFFs fail (commented; OL Image layers will render directly)
+        // new TileLayer({ source: new OSM(), visible:false }),
+        molaLayer,
+        hmcLayer,
+        vectorLayer
+      ],
+      view: new View({
+        projection: marsProj,
+        center: [0, 0], // degrees
+        zoom: 2,        // temporary; we will fit to MOLA extent on load
+        minZoom: 1,
+        maxZoom: 22
+      }),
+      controls: defaultControls({ zoom: true, attribution: false })
+    });
+
+    // === Scale bar (on-map display) ===
+    const scale = new ScaleLine({
+      units: 'metric',
+      minWidth: 140,
+      bar: false,
+      steps: 4
+    });
+    // Attach the ScaleLine DOM into our bottom-right stack (.br-wrap)
+    scale.setTarget(document.getElementById('scaleSlot'));
+    map.addControl(scale);
+
+    // === Error surface ===
+    const errBox = document.getElementById('err');
+    function showError(msg) {
+      errBox.textContent = msg;
+      errBox.style.display = 'block';
+      setTimeout(()=>{ errBox.style.display='none'; }, 9000);
+    }
+
+    // === Fit to MOLA when ready ===
+    molaLayer.getSource().on('change', () => {
+      const state = molaLayer.getSource().getState?.();
+      if (state === 'ready' || state === 'loaded') {
+        const extent = molaLayer.getSource().getImageExtent?.();
+        if (extent) {
+          map.getView().fit(extent, { padding:[20,20,20,20], duration: 600 });
         }
-        const min = Array.isArray(georaster.mins) ? georaster.mins[0] : georaster.min;
-        const max = Array.isArray(georaster.maxs) ? georaster.maxs[0] : georaster.max;
-        const lo = Number.isFinite(min) ? min : 0;
-        const hi = Number.isFinite(max) ? max : lo + 1;
-        return (values) => {
-          const value = values && values[0];
-          if (value === null || value === undefined) return null;
-          if (noDataValue !== undefined && value === noDataValue) return null;
-          const t = (value - lo) / (hi - lo || 1);
-          const clamped = Math.max(0, Math.min(1, t));
-          const g = Math.round(clamped * 255);
-          return `rgb(${g}, ${g}, ${g})`;
-        };
+      } else if (state === 'error') {
+        showError('Failed to load MOLA GeoTIFF (CORS or network). If this persists, host a CORS-enabled copy.');
       }
-
-      async function ensureLayer(config, statusEl) {
-        if (state.has(config.id) && state.get(config.id).layer) return state.get(config.id);
-        if (state.has(config.id) && state.get(config.id).promise) return state.get(config.id).promise;
-
-        const deferred = (async () => {
-          statusEl.textContent = 'loading…';
-          try {
-            const response = await fetch(toFetchUrl(config.url), { mode: 'cors' });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const arrayBuffer = await response.arrayBuffer();
-            const georaster = await parseGeoraster(arrayBuffer);
-            const layer = new GeoRasterLayer({
-              georaster,
-              pane: config.pane,
-              resolution: config.resolution || 256,
-              opacity: config.opacity ?? 1,
-              updateWhenIdle: true,
-              pixelValuesToColorFn: createColorFn(georaster, georaster.noDataValue),
-              useWebWorkers: false
-            });
-            layer.on('load', () => { statusEl.textContent = ''; });
-            const result = { layer, georaster };
-            state.set(config.id, result);
-            return result;
-          } catch (error) {
-            console.error('Failed to load GeoTIFF layer', config.name, error);
-            statusEl.textContent = 'failed';
-            throw error;
-          }
-        })();
-
-        state.set(config.id, { promise: deferred });
-        return deferred;
+    });
+    hmcLayer.getSource().on('change', () => {
+      const state = hmcLayer.getSource().getState?.();
+      if (state === 'error') {
+        showError('Failed to load HMC GeoTIFF (CORS or network).');
       }
+    });
 
-      function fitToLayer(georaster) {
-        if (!georaster) return;
-        const bounds = [
-          [georaster.ymin, georaster.xmin],
-          [georaster.ymax, georaster.xmax]
-        ];
-        map.fitBounds(bounds, { padding: [20, 20] });
+    // === Layer toggles ===
+    const chkMola = document.getElementById('chk-mola');
+    const chkHmc  = document.getElementById('chk-hmc');
+    chkMola.addEventListener('change', ()=> molaLayer.setVisible(chkMola.checked));
+    chkHmc.addEventListener('change',  ()=> hmcLayer.setVisible(chkHmc.checked));
+
+    // === Interactions: select / draw / modify ===
+    const select = new Select();
+    const modify = new Modify({ source: vectorSource });
+    map.addInteraction(select);
+    map.addInteraction(modify);
+
+    let draw = null;
+    function setMode(mode) {
+      // remove existing draw
+      if (draw) { map.removeInteraction(draw); draw = null; }
+      // deactivate select while drawing, then re-enable
+      if (mode === 'select') {
+        select.setActive(true);
+        modify.setActive(true);
+        setActiveButton('btn-select');
+        tooltip.classList.add('hidden');
+        return;
       }
+      select.setActive(false);
+      modify.setActive(false);
 
-      // Build the layer UI and wire up interactions
-      overlayConfigs.forEach((config) => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'layer-entry';
+      if (mode === 'point' || mode === 'line' || mode === 'poly') {
+        const type = mode === 'point' ? 'Point' : (mode === 'line' ? 'LineString' : 'Polygon');
+        draw = new Draw({ source: vectorSource, type });
+        map.addInteraction(draw);
+        setActiveButton(mode === 'point' ? 'btn-point' : mode === 'line' ? 'btn-line' : 'btn-poly');
 
-        const label = document.createElement('label');
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = Boolean(config.defaultVisible);
-        checkbox.setAttribute('data-layer', config.id);
-        checkbox.id = `layer-${config.id}`;
+        // Measurement feedback
+        draw.on('drawstart', evt => {
+          tooltip.classList.remove('hidden');
+          updateTooltip(evt.feature);
+          evt.feature.on('change', () => updateTooltip(evt.feature));
+        });
+        draw.on('drawend', () => {
+          setTimeout(()=>tooltip.classList.add('hidden'), 200);
+        });
+      }
+    }
 
-        const title = document.createElement('strong');
-        title.textContent = config.name;
+    function setActiveButton(id) {
+      ['btn-select','btn-point','btn-line','btn-poly'].forEach(b=>{
+        const el = document.getElementById(b);
+        if (!el) return;
+        if (b === id) el.classList.add('active'); else el.classList.remove('active');
+      });
+    }
 
-        const status = document.createElement('span');
-        status.className = 'layer-status';
+    document.getElementById('btn-select').onclick = ()=> setMode('select');
+    document.getElementById('btn-point').onclick  = ()=> setMode('point');
+    document.getElementById('btn-line').onclick   = ()=> setMode('line');
+    document.getElementById('btn-poly').onclick   = ()=> setMode('poly');
+    document.getElementById('btn-clear').onclick  = ()=> vectorSource.clear();
 
-        const description = document.createElement('small');
-        description.textContent = config.description;
+    // Start in Select mode
+    setMode('select');
 
-        label.appendChild(checkbox);
-        label.appendChild(title);
-        label.appendChild(status);
+    // === Measure tooltip overlay ===
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip hidden';
+    const tooltipOverlay = new Overlay({ element: tooltip, offset:[0, -12], positioning:'bottom-center' });
+    map.addOverlay(tooltipOverlay);
 
-        const opacityGroup = document.createElement('div');
-        opacityGroup.className = 'opacity-group';
-        const opacityLabel = document.createElement('span');
-        opacityLabel.textContent = 'Opacity';
-        const slider = document.createElement('input');
-        slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05';
-        slider.value = String(config.opacity ?? 1); slider.disabled = true;
-        opacityGroup.appendChild(opacityLabel);
-        opacityGroup.appendChild(slider);
+    function formatLength(m) {
+      if (m > 1000) return (m/1000).toFixed(2) + ' km';
+      return m.toFixed(1) + ' m';
+    }
+    function formatArea(a) {
+      if (a > 1e6) return (a/1e6).toFixed(2) + ' km²';
+      return a.toFixed(1) + ' m²';
+    }
+    function updateTooltip(feature) {
+      const geom = feature.getGeometry();
+      let txt = '';
+      if (geom instanceof LineString) {
+        const coords = geom.getCoordinates();
+        const len = getLength(new LineString(coords, 'XY'), {radius: MARS_RADIUS});
+        txt = 'Length: ' + formatLength(len);
+        tooltipOverlay.setPosition(coords[coords.length-1]);
+      } else if (geom instanceof Polygon) {
+        const coords = geom.getCoordinates()[0];
+        const area = getArea(new Polygon([coords], 'XY'), {radius: MARS_RADIUS});
+        txt = 'Area: ' + formatArea(area);
+        // place near last vertex
+        tooltipOverlay.setPosition(coords[coords.length-2] || coords[0]);
+      } else {
+        const c = geom.getCoordinates();
+        tooltipOverlay.setPosition(c);
+        txt = `Point: ${c.map(v=>v.toFixed(4)).join(', ')}`;
+      }
+      tooltip.textContent = txt;
+    }
 
-        wrapper.appendChild(label);
-        wrapper.appendChild(description);
-        wrapper.appendChild(opacityGroup);
-        layerList.appendChild(wrapper);
+    // === Export PNG (layers + annotations + custom scale bar + logo) ===
+    document.getElementById('btn-export').onclick = async () => {
+      try {
+        const size = map.getSize();
+        if (!size) return;
+        // Force a synchronous render
+        map.renderSync();
+        // Composite all layer canvases
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = size[0];
+        exportCanvas.height = size[1];
+        const ctx = exportCanvas.getContext('2d');
 
-        checkbox.addEventListener('change', async (event) => {
-          if (event.target.checked) {
-            try {
-              const { layer, georaster } = await ensureLayer(config, status);
-              layer.addTo(map);
-              slider.disabled = false;
-              slider.value = String(layer.options.opacity ?? 1);
-              if (!config._fitted) { fitToLayer(georaster); config._fitted = true; }
-            } catch (error) {
-              alert(`Unable to load ${config.name}. The remote host may be missing CORS headers or range request support. See console for details.`);
-              checkbox.checked = false;
-            } finally {
-              if (status.textContent === 'loading…') status.textContent = '';
+        // Draw each OL layer canvas in order
+        document.querySelectorAll('.ol-layer canvas').forEach(layerCanvas => {
+          if (layerCanvas.width > 0) {
+            ctx.globalAlpha = layerCanvas.parentNode.style.opacity ? Number(layerCanvas.parentNode.style.opacity) : 1;
+            const transform = layerCanvas.style.transform;
+            // Parse matrix(a, b, c, d, e, f)
+            const matrix = transform.match(/^matrix\(([^\(]+)\)$/);
+            if (matrix) {
+              const vals = matrix[1].split(',').map(Number);
+              ctx.setTransform(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5]);
+            } else {
+              ctx.setTransform(1, 0, 0, 1, 0, 0);
             }
-          } else {
-            slider.disabled = true;
-            const info = state.get(config.id);
-            if (info && info.layer && map.hasLayer(info.layer)) map.removeLayer(info.layer);
+            ctx.drawImage(layerCanvas, 0, 0);
           }
         });
 
-        slider.addEventListener('input', (event) => {
-          const opacity = parseFloat(event.target.value);
-          const info = state.get(config.id);
-          if (info && info.layer) info.layer.setOpacity(opacity);
-        });
+        // Reset transform
+        ctx.setTransform(1,0,0,1,0,0);
 
-        // Auto-load defaults
-        if (checkbox.checked) checkbox.dispatchEvent(new Event('change'));
-      });
+        // Draw a custom scale bar (bottom-right above the logo)
+        drawExportScaleBar(ctx);
 
-      // Clear annotations
-      document.getElementById('clear-annotations').addEventListener('click', () => drawnItems.clearLayers());
-
-      // Download PNG
-      document.getElementById('download-png').addEventListener('click', async () => {
-        try {
-          const blob = await screenshoter.takeScreen('blob', { mimeType: 'image/png' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          link.download = `mars-webgis-${timestamp}.png`;
-          document.body.appendChild(link);
-          link.click();
-          requestAnimationFrame(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          });
-        } catch (error) {
-          console.error('Failed to export map', error);
-          alert('Export failed. Check console for details.');
+        // Draw logo if present in DOM
+        const logoImg = document.querySelector('.logo');
+        if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+          const margin = 10;
+          const w = Math.min(160, exportCanvas.width * 0.2);
+          const aspect = logoImg.naturalHeight / logoImg.naturalWidth;
+          const h = w * aspect;
+          ctx.save();
+          ctx.globalAlpha = 0.95;
+          roundRect(ctx, exportCanvas.width - w - margin, exportCanvas.height - h - margin, w, h, 10);
+          ctx.clip();
+          ctx.drawImage(logoImg, exportCanvas.width - w - margin, exportCanvas.height - h - margin, w, h);
+          ctx.restore();
+          // thin border
+          ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+          ctx.lineWidth = 1;
+          roundRect(ctx, exportCanvas.width - w - margin, exportCanvas.height - h - margin, w, h, 10);
+          ctx.stroke();
         }
-      });
-    </script>
-  </body>
+
+        const dataURL = exportCanvas.toDataURL('image/png');
+        // trigger download
+        const a = document.createElement('a');
+        a.href = dataURL;
+        a.download = 'saiil-mars-map.png';
+        a.click();
+      } catch (e) {
+        console.error(e);
+        showError('Export failed (see console). Some browsers block cross-origin canvases.');
+      }
+    };
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function niceScale(max) {
+      // nice round numbers: 1, 2, 5 × 10^n
+      const pow = Math.pow(10, Math.floor(Math.log10(max)));
+      const d = max / pow;
+      if (d >= 5) return 5 * pow;
+      if (d >= 2) return 2 * pow;
+      return 1 * pow;
+    }
+
+    function drawExportScaleBar(ctx) {
+      const pxPerM = 1 / Math.max(1e-9, metersPerPixel(map)); // pixels per meter
+      // target a bar ~ 180px
+      const targetPx = 180;
+      const targetMeters = targetPx / Math.max(1e-9, pxPerM);
+      const barMeters = niceScale(targetMeters);
+      const barPx = barMeters * pxPerM;
+
+      const margin = 14;
+      const barH = 10;
+      const x = ctx.canvas.width - barPx - margin;
+      const y = ctx.canvas.height - margin - 8 - barH; // leave room for text and logo
+
+      // background
+      ctx.fillStyle = 'rgba(20,20,28,0.9)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1;
+      roundRect(ctx, x - 8, y - 10, barPx + 16, barH + 26, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // bar
+      ctx.fillStyle = '#e6e6ea';
+      ctx.fillRect(x, y, barPx, barH);
+
+      // label
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      ctx.fillStyle = '#e6e6ea';
+      const label = barMeters >= 1000 ? (barMeters/1000).toFixed(barMeters%1000===0?0:1) + ' km'
+                                      : Math.round(barMeters) + ' m';
+      ctx.fillText(label, x, y - 4);
+    }
+
+    // Basic keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'Escape') setMode('select');
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault(); document.getElementById('btn-export').click();
+      }
+    });
+
+    // If either GeoTIFF throws a network/CORS error early, catch via a quick HEAD check (best-effort)
+    // (Some browsers won’t allow HEAD without CORS; this is just a gentle preflight to give feedback sooner.)
+    ;(async function preflight(){
+      for (const [u,name] of [[URL_MOLA,'MOLA'], [URL_HMC,'HMC']]) {
+        try {
+          const r = await fetch(u, { method:'HEAD', mode:'cors' });
+          if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        } catch (e) {
+          showError(`${name} may be blocked by CORS on this origin. If loading fails, mirror it with CORS enabled or use a dev proxy.`);
+        }
+      }
+    })();
+  </script>
+</body>
 </html>
