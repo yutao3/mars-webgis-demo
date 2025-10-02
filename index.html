@@ -54,10 +54,12 @@
 
     <div class="section basemap">
       <h3>Basemap</h3>
-      <label><input type="radio" name="basemap" id="bm-opm" checked> <span>OpenPlanetary Mars (XYZ)</span></label>
-      <!-- Keep slot for a future hillshade toggle if you want -->
-      <!-- <label><input type="radio" name="basemap" id="bm-alt"> <span>Alternative basemap</span></label> -->
-      <div class="help">CORS-friendly global basemap. If you want a MOLA hillshade toggle, we can add a NASA Trek WMTS later.</div>
+      <label><input type="radio" name="basemap" id="bm-asu" checked> <span>ASU MOLA (XYZ guess)</span></label>
+      <label><input type="radio" name="basemap" id="bm-asu-tms"> <span>ASU MOLA (TMS Y-flip)</span></label>
+      <label><input type="radio" name="basemap" id="bm-custom"> <span>Custom (via proxy)</span></label>
+      <div class="help">
+        If tiles are blocked by CORS, set <code>PROXY</code> below (same origin) and use "Custom".
+      </div>
     </div>
 
     <div class="section layers">
@@ -109,7 +111,21 @@
 </div>
 
 <script>
-  // --- OpenLayers aliases
+  // ---------- CONFIG ----------
+  // If you add a same-origin proxy (recommended), set it here:
+  // e.g., const PROXY = '/tile/?u='; // Nginx/Cloudflare route that fetches the remote URL
+  const PROXY = ''; // leave empty if not using a proxy
+
+  // ASU MOLA "large" tiles (edit to match exact directory layout if needed)
+  // Common patterns are either {z}/{x}/{y}.jpg or {z}/{x}_{y}.jpg — start with this:
+  const ASU_MOLA_XYZ = 'https://www.mars.asu.edu/data/mola_color/large/{z}/{x}/{y}.jpg';
+  // Alternate pattern (TMS Y-flip); OpenLayers can flip Y with tileUrlFunction below if needed.
+  const ASU_MOLA_XYZ_UNDERSCORE = 'https://www.mars.asu.edu/data/mola_color/large/{z}/{x}_{y}.jpg';
+
+  // A fully custom template. Replace with anything (e.g., NASA Trek WMTS converted to XYZ).
+  const CUSTOM_XYZ = 'https://example.com/mars/{z}/{x}/{y}.png'; // set this and turn on PROXY if CORS blocks
+
+  // ---------- OL aliases ----------
   const Map = ol.Map;
   const View = ol.View;
   const ImageLayer = ol.layer.Image;
@@ -125,27 +141,58 @@
   const Overlay = ol.Overlay;
   const {getArea, getLength} = ol.sphere;
 
-  // Mars spherical radius (for measurements)
-  const MARS_RADIUS = 3396190; // meters
+  const MARS_RADIUS = 3396190;
 
-  // ======= Basemap (CORS-friendly) =======
-  // OpenPlanetary Mars basemap via Carto/Fastly (XYZ)
-  const XYZ_OPM_BASE = "https://cartocdn-ashbu.global.ssl.fastly.net/nmanaud/api/v1/map/named/opm-mars-basemap-v0-1/all/{z}/{x}/{y}.png";
+  // ---------- Helpers ----------
+  const errBox = document.getElementById("err");
+  function showError(msg){
+    errBox.textContent = msg;
+    errBox.style.display="block";
+    clearTimeout(showError._t);
+    showError._t = setTimeout(()=>errBox.style.display="none", 9000);
+  }
 
-  const opmBase = new TileLayer({
+  function withProxy(url) {
+    return PROXY ? (PROXY + encodeURIComponent(url)) : url;
+  }
+
+  // Y-flip helper for TMS
+  function tmsY(z, y) {
+    return (Math.pow(2, z) - 1) - y;
+  }
+
+  // ---------- Basemaps ----------
+  // 1) ASU MOLA (XYZ guess)
+  const asuMola = new TileLayer({
     source: new XYZ({
-      url: XYZ_OPM_BASE,
+      url: withProxy(ASU_MOLA_XYZ),
       crossOrigin: "anonymous",
-      maxZoom: 19
+      maxZoom: 8 // adjust to match ASU pyramid depth
     }),
     visible: true,
     zIndex: 0
   });
 
-  // (Optional second basemap slot, currently same as OPM; you can wire a NASA Trek WMTS later.)
-  const altBase = new TileLayer({
+  // 2) ASU MOLA (TMS Y-flip)
+  const asuMolaTms = new TileLayer({
     source: new XYZ({
-      url: XYZ_OPM_BASE,
+      url: withProxy(ASU_MOLA_XYZ_UNDERSCORE),
+      crossOrigin: "anonymous",
+      maxZoom: 8,
+      tileUrlFunction: function([z, x, y]) {
+        const yTms = tmsY(z, y);
+        return withProxy(ASU_MOLA_XYZ_UNDERSCORE
+          .replace('{z}', z).replace('{x}', x).replace('{y}', yTms));
+      }
+    }),
+    visible: false,
+    zIndex: 0
+  });
+
+  // 3) Custom (use with your proxy to bypass CORS)
+  const customBase = new TileLayer({
+    source: new XYZ({
+      url: withProxy(CUSTOM_XYZ),
       crossOrigin: "anonymous",
       maxZoom: 19
     }),
@@ -153,7 +200,7 @@
     zIndex: 0
   });
 
-  // ======= Overlays (GeoTIFF; may need CORS from remote hosts) =======
+  // ---------- Overlays (GeoTIFF) ----------
   const URL_HRSC = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/HMC_11W24_ND5_OXIA_CROP.tif";
   const URL_CTX  = "https://archives.esac.esa.int/psa/ftp/Guest-Storage-Facility/UCL-MSSL_Oxia-Planum_HRSC_CTX_HiRISE_MADNet_V1.0/CTX-ORIs/F23_044811_1985_XN_18N024W-F23_044956_1984_XN_18N024W-ORI.tif";
 
@@ -162,7 +209,7 @@
 
   function createGeoTiffLayer(url, zIndex){
     const src = new GeoTIFFSource({
-      sources: [{ url }],
+      sources: [{ url: withProxy(url) }],
       convertToRGB: true,
       normalize: false,
       interpolate: true
@@ -175,7 +222,7 @@
     return lyr;
   }
 
-  // ======= Annotations layer =======
+  // ---------- Annotations ----------
   const vectorSource = new VectorSource();
   const vectorLayer = new VectorLayer({
     source: vectorSource,
@@ -196,38 +243,33 @@
     }
   });
 
-  // ======= Map =======
+  // ---------- Map ----------
   const map = new Map({
     target: "mapCanvas",
-    layers: [opmBase, altBase, vectorLayer],
-    // Use Web Mercator view to match XYZ basemap; measurements pass MARS_RADIUS explicitly.
+    layers: [asuMola, asuMolaTms, customBase, vectorLayer],
     view: new View({ center:[0,0], zoom: 2, minZoom:1, maxZoom:22 })
   });
 
-  // Scale bar to fixed slot
+  // Scale bar
   const scale = new ScaleLine({ units:"metric", minWidth:140, bar:false, steps:4 });
   scale.setTarget(document.getElementById("scaleSlot"));
   map.addControl(scale);
 
-  // ======= UI helpers =======
-  const errBox = document.getElementById("err");
-  function showError(msg){
-    errBox.textContent = msg;
-    errBox.style.display="block";
-    clearTimeout(showError._t);
-    showError._t = setTimeout(()=>errBox.style.display="none", 9000);
-  }
-
-  // ======= Basemap toggle (future-ready; currently both point to OPM) =======
-  document.getElementById("bm-opm").addEventListener("change", (e)=> {
-    if (e.target.checked){ opmBase.setVisible(true); altBase.setVisible(false); }
+  // ---------- Basemap radio buttons ----------
+  document.getElementById("bm-asu").addEventListener("change", (e)=> {
+    if (!e.target.checked) return;
+    asuMola.setVisible(true); asuMolaTms.setVisible(false); customBase.setVisible(false);
   });
-  // If you add a second basemap, wire its radio button here:
-  // document.getElementById("bm-alt").addEventListener("change", (e)=> {
-  //   if (e.target.checked){ opmBase.setVisible(false); altBase.setVisible(true); }
-  // });
+  document.getElementById("bm-asu-tms").addEventListener("change", (e)=> {
+    if (!e.target.checked) return;
+    asuMola.setVisible(false); asuMolaTms.setVisible(true); customBase.setVisible(false);
+  });
+  document.getElementById("bm-custom").addEventListener("change", (e)=> {
+    if (!e.target.checked) return;
+    asuMola.setVisible(false); asuMolaTms.setVisible(false); customBase.setVisible(true);
+  });
 
-  // ======= Overlays (lazy load/remove) =======
+  // ---------- Overlays toggles ----------
   const chkHRSC = document.getElementById("chk-hrsc");
   const chkCTX  = document.getElementById("chk-ctx");
 
@@ -245,7 +287,7 @@
     } else if (ctxLayer) { ctxLayer.setVisible(false); }
   });
 
-  // ======= Zoom to layer extent =======
+  // ---------- Zoom to extent ----------
   document.getElementById("btn-zoom-hrsc").onclick = ()=> {
     if (!hrscLayer) return showError("HRSC not loaded yet. Tick the HRSC checkbox first.");
     const ex = hrscLayer.getSource().getImageExtent?.();
@@ -259,14 +301,14 @@
     else showError("CTX extent not available yet. Try again in a moment.");
   };
 
-  // ======= Interactions & measurement =======
+  // ---------- Interactions & measurement ----------
   const select = new Select();
   const modify = new Modify({ source: vectorSource });
   map.addInteraction(select);
   map.addInteraction(modify);
   let draw = null;
 
-  // Create tooltip BEFORE setMode is called (prevents "Cannot access 'tooltip' before initialization")
+  // Create tooltip BEFORE setMode is called
   const tooltip = document.createElement("div");
   tooltip.className = "tooltip hidden";
   const tooltipOverlay = new Overlay({ element: tooltip, offset:[0, -12], positioning:"bottom-center" });
@@ -322,7 +364,7 @@
     }
   }
 
-  // ======= Export PNG (layers + annotations + scale + logo) =======
+  // ---------- Export PNG ----------
   document.getElementById("btn-export").onclick = () => {
     try {
       const size = map.getSize(); if (!size) return;
@@ -353,11 +395,10 @@
       const url = out.toDataURL("image/png"); const a = document.createElement("a"); a.href = url; a.download = "saiil-mars-map.png"; a.click();
     } catch (e) {
       console.error(e);
-      showError("Export blocked by browser due to cross-origin canvas. Ensure remote overlays are CORS-enabled.");
+      showError("Export blocked by browser due to cross-origin canvas. Ensure remote overlays are CORS-enabled or proxied.");
     }
   };
 
-  // Export helpers
   function metersPerPixel() {
     const res = map.getView().getResolution(); if (!res) return 0;
     const c = map.getView().getCenter(); if (!c) return 0;
@@ -378,7 +419,7 @@
     ctx.fillText(label, x, y-4);
   }
 
-  // Optional warning if GeoTIFF.js is globally injected by an extension
+  // Optional heads-up
   if (window.GeoTIFF) {
     const warn = document.getElementById("globalWarn");
     warn.style.display = "block";
